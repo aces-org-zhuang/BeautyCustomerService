@@ -23,7 +23,7 @@ export function loadConfig(env = process.env) {
     llmWikiCandidatePath: env.LLM_WIKI_CANDIDATE_PATH || DEFAULT_LLM_WIKI_CANDIDATE_PATH,
     wechatKfEnabled: env.WECHAT_KF_ENABLED === "1",
     wechatKfSendEnabled: env.WECHAT_KF_SEND_ENABLED === "1",
-    wechatCorpId: env.WECHAT_CORP_ID || "",
+    wechatCorpId: env.WECHAT_CORP_ID || env.WECHAT_KF_CORP_ID || "",
     wechatKfSecret: env.WECHAT_KF_SECRET || "",
     wechatKfCallbackToken: env.WECHAT_KF_CALLBACK_TOKEN || "",
     wechatKfEncodingAesKey: env.WECHAT_KF_ENCODING_AES_KEY || "",
