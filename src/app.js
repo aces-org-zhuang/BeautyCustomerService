@@ -35,9 +35,9 @@ function countBy(items, getKey) {
 
 function toKnowledgeArtifact(candidate) {
   const publicationDecision = candidate.publication_decision || { publication_decision: "block", reason: "unknown" };
-  const llmWikiArtifact = candidate.llm_wiki_artifact || { path: `wiki/review/${candidate.id}.md`, status: "draft_review" };
+  const llmWikiArtifact = candidate.llm_wiki_artifact || { path: `wiki/draft-answers/${candidate.id}.md`, status: "draft_review" };
   const ragflowSync = candidate.ragflow_sync || {
-    target: "RAGFlow production KB",
+    target: "LLM Wiki approved-answers -> RAGFlow",
     status: candidate.ragflow_sync_allowed ? "ready" : "blocked",
     reason: publicationDecision.reason || "review_and_evaluation_required",
   };
@@ -194,6 +194,7 @@ function normalizeConfig(config) {
     ragflowStagingDelimiter: "\n",
     useRagflow: false,
     enableLocalTestKnowledge: false,
+    enableDemoPublishedKnowledge: false,
     llmWikiBaseUrl: "http://127.0.0.1:19828",
     llmWikiApiToken: "",
     llmWikiCandidatePath: "",
@@ -571,6 +572,10 @@ export function createApp(inputConfig) {
 
       const publishMatch = url.pathname.match(/^\/knowledge\/feedback-candidates\/([^/]+)\/publish-local$/);
       if (request.method === "POST" && publishMatch) {
+        if (!config.enableDemoPublishedKnowledge) {
+          sendJson(response, 409, { ok: false, status: "demo_only_disabled", reason: "publish_local_disabled" });
+          return;
+        }
         const result = await store.update((state) => {
           const candidate = state.feedbackCandidates.find((item) => item.id === publishMatch[1]);
           return publishCandidate(state, candidate);

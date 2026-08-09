@@ -100,15 +100,16 @@
 
       <section class="panel" aria-labelledby="candidates-title">
         <div class="section-title">
-          <h2 id="candidates-title">LLM Wiki 反哺候选</h2>
+          <h2 id="candidates-title">本地候选与 LLM Wiki 治理状态</h2>
           <span id="candidate-count" class="counter">0</span>
         </div>
+        <p class="panel-note">本地审核/发布只用于 demo；生产同步以 LLM Wiki approved-answers 中的 approved + pass/passed + sources 为准。</p>
         <div id="candidates" class="list" aria-live="polite"></div>
       </section>
 
       <section class="panel" aria-labelledby="answer-checks-title">
         <div class="section-title">
-          <h2 id="answer-checks-title">回答生效验证</h2>
+          <h2 id="answer-checks-title">RAGFlow 同步与回答生效验证</h2>
           <span id="answer-check-count" class="counter">0</span>
         </div>
         <div class="actions compact-actions">
@@ -136,7 +137,7 @@
 
       <section class="panel" aria-labelledby="knowledge-documents-title">
         <div class="section-title">
-          <h2 id="knowledge-documents-title">可回答知识</h2>
+          <h2 id="knowledge-documents-title">RAGFlow 可回答知识注册表</h2>
           <span id="knowledge-document-count" class="counter">0</span>
         </div>
         <div id="knowledge-documents" class="list" aria-live="polite"></div>
@@ -186,7 +187,7 @@
 
       <section class="panel" aria-labelledby="published-title">
         <div class="section-title">
-          <h2 id="published-title">本地已发布知识</h2>
+          <h2 id="published-title">本地已发布知识 demo/fallback</h2>
           <span id="published-count" class="counter">0</span>
         </div>
         <div id="published-knowledge" class="knowledge-grid" aria-live="polite"></div>

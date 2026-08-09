@@ -45,22 +45,25 @@
    include -> [UC4.1 审核 candidate] 已实现: POST /knowledge/feedback-candidates/:id/review
    include -> [UC4.2 本地/未来 Ragas 评估] 部分实现: 本地 evaluation policy 已实现，Ragas runner 未实现
    include -> [UC4.3 校验 source_refs] 已实现: publication/evaluation gate 校验 source_refs
-   extend  -> [UC5 LLM Wiki 治理] 未实现: 主仓 candidate 写入 LLM Wiki 未实现
+   extend  -> [UC5 LLM Wiki 治理] 部分实现: 主仓 candidate/source 可写入 LLM Wiki，review -> approved-answers 晋级仍依赖 LLM Wiki 人工流程
    extend  -> [UC6 同步 RAGFlow] 部分实现: 已支持读取 LLM Wiki approved/passed candidate 同步 RAGFlow
 
 [UC5 LLM Wiki 治理] 部分实现
-   include -> [UC5.1 写入 source_material] 未实现: POST /materials/:id/publish-to-llm-wiki 缺失
-   include -> [UC5.2 写入 faq_candidate] 未实现: 主仓到 LLM Wiki 写入缺失
-   include -> [UC5.3 读取 review/evaluation 状态] 部分实现: 可读取指定 LLM Wiki candidate；状态回写主仓缺失
+   include -> [UC5.1 写入 source_material] 已实现: POST /materials/:id/publish-to-llm-wiki 可写入材料蒸馏产物
+   include -> [UC5.2 写入 faq_candidate] 已实现: 材料蒸馏和人工反馈 candidate 可写入 LLM Wiki 待审区
+   include -> [UC5.3 读取 review/evaluation 状态] 部分实现: 可读取指定 LLM Wiki candidate 并回写主仓 candidate 状态
+   include -> [UC5.4 review 晋级 approved-answers] 未实现: MVP 阶段由 LLM Wiki 内人工移动/重写完成，主仓只扫描 approved-answers 事实源
    extend  -> [UC6 同步 RAGFlow] 已实现: POST /knowledge/sync/llm-wiki-to-ragflow
 
 [UC6 同步 RAGFlow] 部分实现
    include -> [UC6.1 解析 dataset beauty-faq] 已实现: dataset name resolve
    include -> [UC6.2 上传文档] 已实现: RagflowClient.uploadDocument
    include -> [UC6.3 触发 parse/index] 已实现: RagflowClient.parseDocument
-   include -> [UC6.4 后续检索验证] 部分实现: 手工/探针验证已做，自动化真实依赖 smoke 未固化
+   include -> [UC6.4 后续检索验证] 部分实现: 主仓 answer-loop 会绑定本次同步 dataset/document 验证；真实依赖 smoke 仍需外部配置
+   include -> [UC6.5 approved-answers 扫描] 部分实现: 手动扫描可识别 added/modified/deleted/downgraded/blocked，auto_sync 仅处理新增/修改
+   include -> [UC6.6 撤回答复生效权] 部分实现: 主仓 knowledgeDocuments 可逻辑撤回/过滤 inactive 文档，RAGFlow 物理删除/替换仍需真实依赖 POC
    extend  -> [UC1 顾客咨询] 已实现: RAGFlow retrieval 可用于自动回复
-   缺口: sync 去重、真实依赖自动化验收、失败重试未实现。
+   缺口: 定时扫描、真实依赖自动化验收、失败重试、RAGFlow 物理删除/替换未完全固化。
 
 [UC7 系统配置与审计] 部分实现
    include -> [UC7.1 配置 RAGFlow/LLM Wiki] 部分实现: env 配置 + GET /integrations/health
@@ -81,12 +84,13 @@
 
 ## 下一批优先级
 
-1. `UC5 LLM Wiki 治理`: 实现 `POST /materials/:id/publish-to-llm-wiki`，把材料蒸馏结果真实写入 LLM Wiki。
-2. `UC5/UC6 状态闭环`: LLM Wiki review/evaluation 状态回写主仓 candidate，并同步 RAGFlow。
-3. `UC6 RAGFlow Sync`: 增加去重、sync job 状态和失败重试。
-4. `UC7 配置与审计`: 话术禁用词校验、配置页分组、运行时权限边界。
-5. `RAGFlow Memory/Agent 边界 POC`: 只验证客服经验记忆，不接顾客个人长期记忆。
-6. `UC8 真实微信接入`: callback、secret、sync_msg、send_msg、add_contact_way。
+1. `UC5 LLM Wiki 治理`: 补清 review/draft 到 approved-answers 的晋级责任和 UI 状态，不把本地 demo 审核误认为生产审核。
+2. `UC6 RAGFlow Sync`: 固化真实依赖自动化验收、失败重试和 RAGFlow 物理删除/替换 POC。
+3. `UC6 扫描闭环`: 增加定时扫描或事件驱动同步，并保持 blocked finding 可观测。
+4. `路由结构拆分`: 将 `src/app.js` 中 material、handoff、knowledge、integration 路由拆到独立模块，保留 `createApp` 作为组合入口。
+5. `UC7 配置与审计`: 话术禁用词校验、配置页分组、运行时权限边界。
+6. `RAGFlow Memory/Agent 边界 POC`: 只验证客服经验记忆，不接顾客个人长期记忆。
+7. `UC8 真实微信接入`: callback、secret、sync_msg、send_msg、add_contact_way。
 
 ## 维护规则
 

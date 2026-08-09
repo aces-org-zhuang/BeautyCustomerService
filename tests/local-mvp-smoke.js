@@ -22,7 +22,7 @@ async function request(baseUrl, path, options = {}) {
 }
 
 const dir = await mkdtemp(join(tmpdir(), "bcs-smoke-"));
-const server = createServer(createApp({ dataFile: join(dir, "store.json"), useRagflow: true, enableLocalTestKnowledge: true, ragflowDatasetIds: [], ragflowDatasetNames: [], ragflowBaseUrl: "http://127.0.0.1:9380", ragflowApiKey: "", llmWikiBaseUrl: "http://127.0.0.1:19828", llmWikiApiToken: "", llmWikiCandidatePath: "" }));
+const server = createServer(createApp({ dataFile: join(dir, "store.json"), useRagflow: true, enableLocalTestKnowledge: true, enableDemoPublishedKnowledge: true, ragflowDatasetIds: [], ragflowDatasetNames: [], ragflowBaseUrl: "http://127.0.0.1:9380", ragflowApiKey: "", llmWikiBaseUrl: "http://127.0.0.1:19828", llmWikiApiToken: "", llmWikiCandidatePath: "" }));
 
 try {
   const port = await listen(server);
@@ -98,7 +98,7 @@ try {
   await request(baseUrl, `/knowledge/feedback-candidates/${candidate.id}/review`, { method: "POST", body: JSON.stringify({ decision: "approve", reviewer_id: "reviewer_001" }) });
   await request(baseUrl, `/knowledge/feedback-candidates/${candidate.id}/evaluate`, { method: "POST", body: JSON.stringify({ result: "pass" }) });
   const published = await request(baseUrl, `/knowledge/feedback-candidates/${candidate.id}/publish-local`, { method: "POST", body: "{}" });
-  if (!published.ok || published.published.publication_target !== "local_published_knowledge") throw new Error("candidate was not published to local knowledge");
+  if (!published.ok || published.published.publication_target !== "demo_local_published_knowledge") throw new Error("candidate was not published to demo local knowledge");
   const publishedKnowledge = await request(baseUrl, "/knowledge/published");
   if (publishedKnowledge.knowledge.length !== 1) throw new Error("published local knowledge was not stored");
   const learnedAnswer = await request(baseUrl, "/dev/fake-wechat/messages", {
@@ -109,7 +109,7 @@ try {
 
   console.log(JSON.stringify({
     ok: true,
-    operatorUi: operatorPage.includes("LLM Wiki 反哺候选"),
+    operatorUi: operatorPage.includes("本地候选与 LLM Wiki 治理状态"),
     featureOverview: initialFeatures.pipeline.map((item) => item.id),
     localKnowledgeCount: localKnowledge.knowledge.length,
     materialCount: (await request(baseUrl, "/materials")).materials.length,

@@ -320,7 +320,7 @@ function renderCandidates(artifacts) {
       <dl class="candidate-flow">
         <div><dt>LLM Wiki</dt><dd></dd></div>
         <div><dt>Evaluation</dt><dd></dd></div>
-        <div><dt>RAGFlow Sync</dt><dd></dd></div>
+        <div><dt>生产同步门禁</dt><dd></dd></div>
         <div><dt>Block Reason</dt><dd></dd></div>
         <div><dt>Source</dt><dd></dd></div>
         <div><dt>Risk</dt><dd></dd></div>
@@ -332,9 +332,11 @@ function renderCandidates(artifacts) {
     card.querySelector(".question").textContent = candidate.question;
     card.querySelector(".answer").textContent = candidate.answer;
     const details = card.querySelectorAll(".candidate-flow dd");
-    details[0].textContent = `${candidate.llm_wiki_artifact?.status || "draft_review"} · ${candidate.llm_wiki_artifact?.path || "wiki/review"}`;
+    details[0].textContent = `${candidate.llm_wiki_artifact?.status || "draft_review"} · ${candidate.llm_wiki_artifact?.path || "wiki/draft-answers"}`;
     details[1].textContent = candidate.evaluation_status;
-    details[2].textContent = `${candidate.ragflow_sync?.status || "blocked"} -> ${candidate.ragflow_sync?.target || "RAGFlow production KB"}`;
+    details[2].textContent = candidate.ragflow_sync?.status
+      ? `${candidate.ragflow_sync.status} -> ${candidate.ragflow_sync.target}`
+      : "需进入 LLM Wiki approved-answers 并满足 approved + pass/passed + sources";
     details[3].textContent = candidate.publication_decision?.reason || "unknown";
     details[4].textContent = candidate.source_refs?.join(", ") || "no source";
     details[5].textContent = [candidate.risk_label, ...(candidate.risk_labels || [])].filter(Boolean).join(", ") || "normal";
@@ -343,7 +345,7 @@ function renderCandidates(artifacts) {
     if (candidate.review_status === "review") {
       const approve = document.createElement("button");
       approve.type = "button";
-      approve.textContent = "审核通过";
+      approve.textContent = "本地审核通过";
       approve.addEventListener("click", () => reviewCandidate(candidate, "approve"));
       actions.append(approve);
     }
@@ -357,14 +359,14 @@ function renderCandidates(artifacts) {
     if (candidate.publication_decision?.publication_decision === "publish" && !candidate.published_at) {
       const publish = document.createElement("button");
       publish.type = "button";
-      publish.textContent = "发布到本地知识";
+      publish.textContent = "发布到本地 demo 知识";
       publish.addEventListener("click", () => publishCandidate(candidate));
       actions.append(publish);
     }
     if (candidate.llm_wiki_artifact?.path && candidate.publication_decision?.publication_decision === "publish") {
       const verify = document.createElement("button");
       verify.type = "button";
-      verify.textContent = "同步并验证回答";
+      verify.textContent = "从 LLM Wiki 同步 RAGFlow 并验证";
       verify.addEventListener("click", () => syncAndVerifyCandidate(candidate));
       actions.append(verify);
     }
