@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { hashId, nowIso } from "../domain/ids.js";
 import { markKnowledgeDocumentAnswerStatus, upsertActiveKnowledgeDocument, withdrawKnowledgeDocument } from "./knowledge-document-registry.js";
+import { verifyDocumentCleared } from "./ragflow-lifecycle-probe-service.js";
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -33,13 +34,14 @@ function createCheck({ candidatePath, candidateHash = null, question, expectedAn
 }
 
 export class KnowledgeAnswerLoopService {
-  constructor({ llmWikiClient, knowledgeSyncService, knowledgeService }) {
+  constructor({ llmWikiClient, knowledgeSyncService, knowledgeService, ragflowClient = null }) {
     this.llmWikiClient = llmWikiClient;
     this.knowledgeSyncService = knowledgeSyncService;
     this.knowledgeService = knowledgeService;
+    this.ragflowClient = ragflowClient;
   }
 
-  async syncAndVerify({ candidatePath, datasetId = null, datasetName = null, question = null, expectedAnswer = null, waitForParse = false, force = false, state }) {
+  async syncAndVerify({ candidatePath, datasetId = null, datasetName = null, question = null, expectedAnswer = null, waitForParse = false, force = false, physicalReplace = false, state }) {
     if (!candidatePath) return this.recordBlocked({ state, candidatePath, question, expectedAnswer, reason: "missing_llm_wiki_candidate_path" });
     if (!state) throw new Error("state is required");
 
@@ -55,14 +57,26 @@ export class KnowledgeAnswerLoopService {
 
     let syncResult;
     try {
-      syncResult = await this.knowledgeSyncService.syncApprovedCandidate({
-        candidatePath,
-        datasetId,
-        datasetName,
-        waitForParse,
-        force,
-        state,
-      });
+      const previousDocument = physicalReplace ? state.knowledgeDocuments?.find((item) => item.source_path === candidatePath && item.lifecycle_status === "active") : null;
+      syncResult = physicalReplace && previousDocument && typeof this.knowledgeSyncService.replaceApprovedCandidate === "function"
+        ? await this.knowledgeSyncService.replaceApprovedCandidate({
+          candidatePath,
+          datasetId,
+          datasetName,
+          previousDocument,
+          waitForParse,
+          force: true,
+          verifyQuestion: verificationQuestion,
+          state,
+        })
+        : await this.knowledgeSyncService.syncApprovedCandidate({
+          candidatePath,
+          datasetId,
+          datasetName,
+          waitForParse,
+          force,
+          state,
+        });
     } catch (error) {
       return this.recordBlocked({ state, candidatePath, candidateHash, question: verificationQuestion, expectedAnswer, reason: error.message });
     }
@@ -91,10 +105,32 @@ export class KnowledgeAnswerLoopService {
     return { ok: true, status, sync: syncResult, answer: answerResult, check };
   }
 
-  withdraw({ sourcePath = null, documentId = null, reason = "withdrawn", question = null, state }) {
+  async withdraw({ sourcePath = null, documentId = null, reason = "withdrawn", question = null, physicalDelete = false, verifyCleared = false, state }) {
     if (!state) throw new Error("state is required");
     const docs = withdrawKnowledgeDocument(state, { sourcePath, documentId, reason });
     if (docs.length === 0) return this.recordBlocked({ state, candidatePath: sourcePath, question, reason: "knowledge_document_not_found" });
+    const deleteChecks = [];
+    if (physicalDelete) {
+      if (!this.ragflowClient?.configured) return this.recordBlocked({ state, candidatePath: sourcePath || docs[0].source_path, question, reason: "missing_ragflow_api_key" });
+      for (const doc of docs) {
+        try {
+          await this.ragflowClient.deleteDocument(doc.dataset_id, doc.document_id);
+          const deleteCheck = verifyCleared
+            ? await verifyDocumentCleared({ ragflowClient: this.ragflowClient, datasetId: doc.dataset_id, documentId: doc.document_id, question })
+            : { document_cleared: true, retrieval_cleared: true, retrieval_status: "skipped", retrieval_reason: null };
+          deleteChecks.push({ document_id: doc.document_id, ...deleteCheck });
+          if (!deleteCheck.document_cleared || !deleteCheck.retrieval_cleared) {
+            doc.answer_status = "delete_unverified";
+            doc.updated_at = nowIso();
+            return this.recordBlocked({ state, candidatePath: doc.source_path, candidateHash: doc.source_hash, question, reason: "document_or_retrieval_still_visible_after_delete" });
+          }
+        } catch (error) {
+          doc.answer_status = "delete_failed";
+          doc.updated_at = nowIso();
+          return this.recordBlocked({ state, candidatePath: doc.source_path, candidateHash: doc.source_hash, question, reason: error.message });
+        }
+      }
+    }
     const check = createCheck({
       candidatePath: sourcePath || docs[0].source_path,
       candidateHash: docs[0].source_hash,
@@ -102,8 +138,9 @@ export class KnowledgeAnswerLoopService {
       syncResult: { datasetId: docs[0].dataset_id, documentId: docs[0].document_id, status: "withdrawn", syncJob: { id: docs[0].sync_job_id } },
       status: "withdrawn",
     });
+    check.delete_checks = deleteChecks;
     state.knowledgeAnswerChecks.push(check);
-    return { ok: true, status: "withdrawn", documents: docs, check };
+    return { ok: true, status: "withdrawn", documents: docs, deleteChecks, check };
   }
 
   recordBlocked({ state, candidatePath = null, candidateHash = null, question = null, expectedAnswer = null, reason }) {

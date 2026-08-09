@@ -3,6 +3,9 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { JsonStore } from "../src/domain/store.js";
 import { AnswerOrchestrator } from "../src/services/answer-orchestrator.js";
@@ -19,6 +22,16 @@ import { RagflowClient } from "../src/services/ragflow-client.js";
 import { RagflowLifecycleProbeService } from "../src/services/ragflow-lifecycle-probe-service.js";
 import { upsertActiveKnowledgeDocument, withdrawKnowledgeDocument } from "../src/services/knowledge-document-registry.js";
 import { KnowledgeScanService } from "../src/services/knowledge-scan-service.js";
+import { createWechatKfSignature, encryptWechatKfPayloadForTest } from "../src/services/wechat-kf-crypto.js";
+
+const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const testWechatAesKey = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG";
+
+function createEncryptedWechatQuery({ plaintext, token = "callback_token", corpId = "ww_test_corp", timestamp = "1700000000", nonce = "nonce_001" }) {
+  const encrypted = encryptWechatKfPayloadForTest({ encodingAesKey: testWechatAesKey, plaintext, corpId, random: Buffer.from("1234567890123456") });
+  const msgSignature = createWechatKfSignature({ token, timestamp, nonce, encrypted });
+  return { encrypted, msgSignature, timestamp, nonce };
+}
 
 test("JsonStore serializes concurrent updates without losing writes", async () => {
   const dir = await mkdtemp(join(tmpdir(), "bcs-test-"));
@@ -194,6 +207,109 @@ test("publish-local endpoint is blocked unless demo local publish is enabled", a
     assert.equal(response.status, 409);
     assert.equal(body.status, "demo_only_disabled");
     assert.equal(body.reason, "publish_local_disabled");
+  } finally {
+    server.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("WeChat KF callback verification returns decrypted echostr", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "bcs-test-"));
+  const server = (await import("node:http")).createServer((await import("../src/app.js")).createApp({
+    dataFile: join(dir, "store.json"),
+    wechatKfEnabled: true,
+    wechatCorpId: "ww_test_corp",
+    wechatKfCallbackToken: "callback_token",
+    wechatKfEncodingAesKey: testWechatAesKey,
+  }));
+  try {
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const query = createEncryptedWechatQuery({ plaintext: "verified_echo" });
+    const response = await fetch(`${baseUrl}/api/wechat/kf/callback?msg_signature=${query.msgSignature}&timestamp=${query.timestamp}&nonce=${query.nonce}&echostr=${encodeURIComponent(query.encrypted)}`);
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.equal(body, "verified_echo");
+  } finally {
+    server.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("WeChat KF callback rejects invalid verification signature", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "bcs-test-"));
+  const server = (await import("node:http")).createServer((await import("../src/app.js")).createApp({
+    dataFile: join(dir, "store.json"),
+    wechatKfEnabled: true,
+    wechatCorpId: "ww_test_corp",
+    wechatKfCallbackToken: "callback_token",
+    wechatKfEncodingAesKey: testWechatAesKey,
+  }));
+  try {
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const query = createEncryptedWechatQuery({ plaintext: "verified_echo" });
+    const response = await fetch(`${baseUrl}/api/wechat/kf/callback?msg_signature=bad&timestamp=${query.timestamp}&nonce=${query.nonce}&echostr=${encodeURIComponent(query.encrypted)}`);
+    const body = await response.text();
+
+    assert.equal(response.status, 401);
+    assert.equal(body, "invalid_signature");
+  } finally {
+    server.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("WeChat KF POST callback syncs real messages and sends reply through client", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "bcs-test-"));
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url: String(url), body: options.body ? JSON.parse(options.body) : null });
+    if (String(url).includes("/cgi-bin/gettoken")) {
+      return Response.json({ errcode: 0, access_token: "access_token_001", expires_in: 7200 });
+    }
+    if (String(url).includes("/cgi-bin/kf/sync_msg")) {
+      return Response.json({
+        errcode: 0,
+        next_cursor: "cursor_002",
+        msg_list: [{ msgid: "real_msg_001", open_kfid: "wk_real_001", external_userid: "wm_real_001", msgtype: "text", text: { content: "小气泡适合油性肌吗？" } }],
+      });
+    }
+    if (String(url).includes("/cgi-bin/kf/send_msg")) {
+      return Response.json({ errcode: 0, msgid: "sent_msg_001" });
+    }
+    return Response.json({ errcode: 404, errmsg: "unexpected" }, { status: 404 });
+  };
+  const server = (await import("node:http")).createServer((await import("../src/app.js")).createApp({
+    dataFile: join(dir, "store.json"),
+    enableLocalTestKnowledge: true,
+    wechatKfEnabled: true,
+    wechatKfSendEnabled: true,
+    wechatCorpId: "ww_test_corp",
+    wechatKfSecret: "secret_for_test",
+    wechatKfCallbackToken: "callback_token",
+    wechatKfEncodingAesKey: testWechatAesKey,
+    fetchImpl,
+  }));
+  try {
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const eventXml = "<xml><ToUserName><![CDATA[ww_test_corp]]></ToUserName><Token><![CDATA[sync_token_001]]></Token><OpenKfId><![CDATA[wk_real_001]]></OpenKfId><Event><![CDATA[kf_msg_or_event]]></Event></xml>";
+    const query = createEncryptedWechatQuery({ plaintext: eventXml });
+    const xml = `<xml><Encrypt><![CDATA[${query.encrypted}]]></Encrypt></xml>`;
+    const response = await fetch(`${baseUrl}/api/wechat/kf/callback?msg_signature=${query.msgSignature}&timestamp=${query.timestamp}&nonce=${query.nonce}`, { method: "POST", body: xml });
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.equal(body, "success");
+    assert.equal(calls.some((call) => call.url.includes("/cgi-bin/kf/sync_msg") && call.body.token === "sync_token_001"), true);
+    assert.equal(calls.some((call) => call.url.includes("/cgi-bin/kf/send_msg") && call.body.touser === "wm_real_001"), true);
+    const state = await new JsonStore(join(dir, "store.json")).load();
+    assert.equal(state.conversations[0].external_userid, "wm_real_001");
+    assert.equal(state.events.some((event) => event.wechat_msgid === "real_msg_001"), true);
+    assert.equal(state.outbox[0].wechat_msgid, "sent_msg_001");
+    assert.equal(state.decisionLogs[0].final_decision, "answer");
   } finally {
     server.close();
     await rm(dir, { recursive: true, force: true });
@@ -460,6 +576,48 @@ test("knowledge sync records idempotent jobs and skips duplicate uploads", async
   assert.equal(state.knowledgeSyncJobs[0].source_refs[0], "wiki/sources/source-001.md");
 });
 
+test("knowledge sync schedules retry and retries failed job", async () => {
+  const candidateMarkdown = [
+    "---",
+    "type: faq_candidate",
+    "review_status: approved",
+    "evaluation_status: pass",
+    "question: \"补水护理适合干皮吗？\"",
+    "sources:",
+    "  - wiki/sources/source-001.md",
+    "---",
+    "Answer: 适合干燥和起皮人群。",
+  ].join("\n");
+  const reads = new Map([
+    ["wiki/approved-answers/candidate.md", candidateMarkdown],
+    ["wiki/sources/source-001.md", "补水护理适合干燥人群。"],
+  ]);
+  let uploads = 0;
+  const service = new KnowledgeSyncService({
+    llmWikiClient: { configured: true, async readFile(path) { return reads.get(path); } },
+    ragflowClient: {
+      configured: true,
+      async uploadDocument() {
+        uploads += 1;
+        if (uploads === 1) throw new Error("temporary_upload_failed");
+        return "doc_retry_001";
+      },
+      async parseDocument() {},
+    },
+  });
+  const state = { knowledgeSyncJobs: [] };
+
+  await assert.rejects(() => service.syncApprovedCandidate({ candidatePath: "wiki/approved-answers/candidate.md", datasetId: "dataset_001", state }), /temporary_upload_failed/);
+  assert.equal(state.knowledgeSyncJobs[0].status, "retry_scheduled");
+
+  const retry = await service.retrySyncJob({ jobId: state.knowledgeSyncJobs[0].id, state });
+
+  assert.equal(retry.ok, true);
+  assert.equal(retry.documentId, "doc_retry_001");
+  assert.equal(state.knowledgeSyncJobs[0].attempts, 2);
+  assert.equal(state.knowledgeSyncJobs[0].status, "started");
+});
+
 test("knowledge answer loop records synced answer verification", async () => {
   const candidateMarkdown = [
     "---",
@@ -688,6 +846,37 @@ test("answer loop withdraw endpoint marks registered document inactive", async (
   }
 });
 
+test("answer loop physical withdraw deletes RAGFlow document and verifies clearing", async () => {
+  const calls = [];
+  const service = new KnowledgeAnswerLoopService({
+    llmWikiClient: {},
+    knowledgeSyncService: {},
+    knowledgeService: {},
+    ragflowClient: {
+      configured: true,
+      async deleteDocument(datasetId, documentId) {
+        calls.push(["deleteDocument", datasetId, documentId]);
+      },
+      async getDocument() {
+        return null;
+      },
+      async retrieve() {
+        return { ok: true, chunks: [] };
+      },
+    },
+  });
+  const state = { knowledgeDocuments: [], knowledgeAnswerChecks: [] };
+  upsertActiveKnowledgeDocument(state, { sourcePath: "wiki/approved-answers/candidate.md", sourceHash: "hash_1", datasetId: "dataset_001", documentId: "doc_001" });
+
+  const result = await service.withdraw({ sourcePath: "wiki/approved-answers/candidate.md", reason: "rejected", question: "补水护理适合干皮吗？", physicalDelete: true, verifyCleared: true, state });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.status, "withdrawn");
+  assert.deepEqual(calls[0], ["deleteDocument", "dataset_001", "doc_001"]);
+  assert.equal(result.deleteChecks[0].document_cleared, true);
+  assert.equal(state.knowledgeDocuments[0].lifecycle_status, "inactive");
+});
+
 test("knowledge scan classifies added modified deleted downgraded unchanged and blocked findings", async () => {
   const approvedOld = [
     "---",
@@ -795,6 +984,60 @@ test("knowledge scan auto syncs added and modified findings only", async () => {
   assert.equal(state.knowledgeDocuments.find((item) => item.document_id === "doc_downgraded").lifecycle_status, "inactive");
 });
 
+test("knowledge scan physical replace deletes old document before syncing modified file", async () => {
+  const approvedOld = [
+    "---",
+    "type: faq_candidate",
+    "review_status: approved",
+    "evaluation_status: pass",
+    "question: \"旧问题？\"",
+    "sources:",
+    "  - wiki/sources/source.md",
+    "---",
+    "Answer: 旧答案",
+  ].join("\n");
+  const approvedNew = approvedOld.replace("旧答案", "新答案");
+  const hash = (value) => createHash("sha256").update(value).digest("hex");
+  const calls = [];
+  const state = { knowledgeDocuments: [], knowledgeScanRuns: [], knowledgeSyncJobs: [], knowledgeAnswerChecks: [] };
+  upsertActiveKnowledgeDocument(state, { sourcePath: "wiki/approved-answers/modified.md", sourceHash: hash(approvedOld), datasetId: "dataset_001", documentId: "doc_old" });
+  const knowledgeSyncService = new KnowledgeSyncService({
+    llmWikiClient: {
+      configured: true,
+      async readFile(path) {
+        if (path === "wiki/sources/source.md") return "来源材料";
+        return approvedNew;
+      },
+    },
+    ragflowClient: {
+      configured: true,
+      async deleteDocument(datasetId, documentId) { calls.push(["delete", datasetId, documentId]); },
+      async getDocument() { return null; },
+      async retrieve() { return { ok: true, chunks: [] }; },
+      async uploadDocument(datasetId) { calls.push(["upload", datasetId]); return "doc_new"; },
+      async parseDocument(datasetId, documentId) { calls.push(["parse", datasetId, documentId]); },
+    },
+  });
+  const service = new KnowledgeScanService({
+    llmWikiClient: {
+      async listMarkdownFiles() { return ["wiki/approved-answers/modified.md"]; },
+      async readFile() { return approvedNew; },
+    },
+    knowledgeAnswerLoopService: new KnowledgeAnswerLoopService({
+      llmWikiClient: { async readFile() { return approvedNew; } },
+      knowledgeSyncService,
+      knowledgeService: { async answer() { return { decision: "answer", answer_text: "新答案", source_refs: ["doc_new"] }; } },
+    }),
+  });
+
+  const result = await service.scanApproved({ scanRoot: "wiki/approved-answers", autoSync: true, physicalReplace: true, state });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls.map((item) => item[0]), ["delete", "upload", "parse"]);
+  assert.equal(state.knowledgeDocuments.find((item) => item.document_id === "doc_old").lifecycle_status, "superseded");
+  assert.equal(state.knowledgeDocuments.find((item) => item.document_id === "doc_new").lifecycle_status, "active");
+});
+
 test("knowledge scan creates alert for blocked findings and can acknowledge it", async () => {
   const dir = await mkdtemp(join(tmpdir(), "bcs-test-"));
   const server = (await import("node:http")).createServer((await import("../src/app.js")).createApp({ dataFile: join(dir, "store.json"), llmWikiBaseUrl: "http://llm-wiki.test" }));
@@ -872,6 +1115,71 @@ test("scan-approved endpoint records scan run", async () => {
     server.close();
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("sync job retry endpoint retries an existing failed job", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "bcs-test-"));
+  const projectDir = join(dir, "llm-wiki-project");
+  await (await import("node:fs/promises")).mkdir(join(projectDir, "wiki", "approved-answers"), { recursive: true });
+  await (await import("node:fs/promises")).mkdir(join(projectDir, "wiki", "sources"), { recursive: true });
+  await (await import("node:fs/promises")).writeFile(join(projectDir, "wiki", "approved-answers", "candidate.md"), [
+    "---",
+    "type: faq_candidate",
+    "review_status: approved",
+    "evaluation_status: pass",
+    "question: \"补水护理适合干皮吗？\"",
+    "sources:",
+    "  - wiki/sources/source.md",
+    "---",
+    "Answer: 适合干燥和起皮人群。",
+  ].join("\n"), "utf8");
+  await (await import("node:fs/promises")).writeFile(join(projectDir, "wiki", "sources", "source.md"), "来源材料", "utf8");
+  const server = (await import("node:http")).createServer((await import("../src/app.js")).createApp({ dataFile: join(dir, "store.json"), ragflowBaseUrl: "http://ragflow.test", ragflowApiKey: "token", ragflowDatasetIds: ["dataset_001"], llmWikiBaseUrl: "http://llm-wiki.test" }));
+  const originalFetch = globalThis.fetch;
+  let uploadCalls = 0;
+  globalThis.fetch = async (url, options = {}) => {
+    const textUrl = String(url);
+    if (textUrl.endsWith("/api/v1/projects")) return new Response(JSON.stringify({ ok: true, currentProject: { id: "project_001", path: projectDir } }), { status: 200, headers: { "Content-Type": "application/json" } });
+    if (textUrl.includes("/api/v1/projects/current/files/content")) {
+      const path = decodeURIComponent(textUrl.split("path=")[1]);
+      const content = await (await import("node:fs/promises")).readFile(join(projectDir, path), "utf8");
+      return new Response(JSON.stringify({ ok: true, content }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (textUrl.endsWith("/api/v1/datasets/dataset_001/documents") && options.method === "POST") {
+      uploadCalls += 1;
+      if (uploadCalls === 1) return new Response(JSON.stringify({ code: 500, message: "temporary_upload_failed" }), { status: 500, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ code: 0, data: { id: "doc_retry_endpoint" } }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (textUrl.endsWith("/api/v1/datasets/dataset_001/chunks")) return new Response(JSON.stringify({ code: 0, data: {} }), { status: 200, headers: { "Content-Type": "application/json" } });
+    return originalFetch(url, options);
+  };
+  try {
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    await fetch(`${baseUrl}/knowledge/sync/llm-wiki-to-ragflow`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ candidate_path: "wiki/approved-answers/candidate.md" }) });
+    const jobs = await fetch(`${baseUrl}/knowledge/sync-jobs`).then((item) => item.json());
+    assert.equal(jobs.jobs[0].status, "retry_scheduled");
+
+    const retry = await fetch(`${baseUrl}/knowledge/sync-jobs/${jobs.jobs[0].id}/retry`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).then((item) => item.json());
+
+    assert.equal(retry.ok, true);
+    assert.equal(retry.documentId, "doc_retry_endpoint");
+  } finally {
+    globalThis.fetch = originalFetch;
+    server.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("live RAGFlow sync verification script skips when env is missing", () => {
+  const result = spawnSync(process.execPath, ["scripts/verify-ragflow-sync-live.js"], {
+    cwd: repoRoot,
+    env: { ...process.env, RAGFLOW_API_KEY: "", RAGFLOW_DATASET_IDS: "", RAGFLOW_DATASET_NAMES: "", LLM_WIKI_CANDIDATE_PATH: "" },
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /"status": "skipped"/);
 });
 
 test("RagflowClient deleteDocument sends dataset document delete request", async () => {

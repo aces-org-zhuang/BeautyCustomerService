@@ -7,9 +7,11 @@ BeautyCustomerService 项目入口。当前主仓已落地本地可运行 MVP �
 
 - 长期项目知识：`docs/README.md`
 - LLM Wiki/RAGFlow 边界：`docs/01-architecture/llm-wiki-ragflow-boundary.md`
+- 数据迁移设计：`docs/05-contracts/data-migration-design.md`
 - 角色与 UseCase 全景：`docs/00-overview/roles-and-use-cases.md`
 - UseCase 实现进度：`docs/08-roadmap/use-case-implementation-progress.md`
 - 外部依赖运行材料：`docs/04-operations/external-dependencies-runtime.md`
+- 系统启动设计：`docs/03-runtime/system-startup-design.md`
 - 开发规则：`AGENTS.md`
 - 文档写作规则：`docs/AGENTS.md`
 - 研究区续点：`vendor/research/aces-research/index.md`
@@ -36,6 +38,9 @@ npm run build
 
 # 完整本地验证
 npm run verify
+
+# 真实 RAGFlow/LLM Wiki 可选验收，缺 env 时会 skipped
+npm run verify:ragflow-live
 ```
 
 当前主仓是 Node.js 标准库 ESM 服务，没有传统编译产物或 `dist/`。统一启动入口是 `src/server.js`，统一配置入口是 `src/config.js`，运行时配置见 `.env.example` 和 `docs/03-runtime/local-service-runtime.md`。
@@ -85,6 +90,13 @@ POST /knowledge/feedback-candidates/:id/review
 POST /knowledge/feedback-candidates/:id/evaluate
 POST /knowledge/feedback-candidates/:id/publish-local  # demo-only，默认禁用
 POST /knowledge/sync/llm-wiki-to-ragflow
+GET  /knowledge/sync-jobs
+GET  /knowledge/sync-jobs/:id
+POST /knowledge/sync-jobs/:id/retry
+POST /knowledge/sync/retry-due
+POST /knowledge/answer-loop/sync-and-verify
+POST /knowledge/answer-loop/scan-approved
+POST /knowledge/answer-loop/withdraw
 ```
 
 `/operator` 会展示本地 MVP 闭环全景和真实依赖健康状态。RAGFlow、LLM Wiki 和 RAGFlow Sync 只有在对应 env 配置存在并通过真实 HTTP 客户端调用时才启用；缺配置时显示 `unconfigured`，不会伪装成已集成。默认 RAGFlow dataset 名称为 `beauty-faq`，默认 LLM Wiki candidate path 为 `wiki/queries/xiaoqipao-oily-skin.md`，对应主仓 `knowledge/llm-wiki-beauty` 项目。

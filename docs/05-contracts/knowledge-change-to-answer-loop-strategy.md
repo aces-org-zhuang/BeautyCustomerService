@@ -271,11 +271,16 @@ LLM Wiki 变更事件
 - approved/pass/sources 门禁。
 - RAGFlow 上传和幂等同步 job。
 - 用户咨询优先使用 RAGFlow retrieval。
+- 手动扫描 LLM Wiki `approved-answers`，识别 added、modified、deleted、downgraded、unchanged 和 blocked。
+- `source_path -> document_id` 生效注册表，支持 active、superseded、inactive。
+- 同步后咨询验证记录，并要求命中本次同步的 dataset/document。
+- 可选 physical withdraw/replace：开启 `physical_delete`、`physical_withdraw` 或 `physical_replace` 时调用 RAGFlow document delete 并验证清理结果。
+- sync job 失败可进入 retry 调度，并通过单 job 或 due jobs endpoint 重试。
 
 待实现：
 
-- LLM Wiki CRUD 变更扫描。
-- RAGFlow document 删除或替换。
-- `source_path -> document_id` 的长期映射。
-- 咨询验证记录。
-- 前端显示“知识是否已影响回答”。
+- 定时扫描或事件驱动同步。
+- 多实例可靠 retry 队列；当前 retry 仍基于单进程 JSON Store。
+- 真实 RAGFlow/LLM Wiki 环境下的自动化验收常态化运行。
+- RAGFlow 测试 dataset 清理策略。
+- 前端完整显示“知识是否已影响回答”和 physical delete/replace 细分状态。

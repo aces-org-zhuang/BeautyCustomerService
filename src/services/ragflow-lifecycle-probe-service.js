@@ -1,5 +1,18 @@
 import { hashId, nowIso } from "../domain/ids.js";
 
+export async function verifyDocumentCleared({ ragflowClient, datasetId, documentId, question = null }) {
+  const docAfterDelete = await ragflowClient.getDocument(datasetId, documentId).catch(() => null);
+  const retrievalAfterDelete = question
+    ? await ragflowClient.retrieve({ datasetIds: [datasetId], question }).catch((error) => ({ ok: false, reason: error.message, chunks: [] }))
+    : { ok: true, chunks: [] };
+  return {
+    document_cleared: !docAfterDelete,
+    retrieval_cleared: (retrievalAfterDelete.chunks || []).length === 0,
+    retrieval_status: retrievalAfterDelete.ok === false ? "failed" : "checked",
+    retrieval_reason: retrievalAfterDelete.reason || null,
+  };
+}
+
 export class RagflowLifecycleProbeService {
   constructor({ ragflowClient }) {
     this.ragflowClient = ragflowClient;
@@ -37,9 +50,8 @@ export class RagflowLifecycleProbeService {
       await this.ragflowClient.deleteDocument(datasetId, documentId);
       check.delete_supported = true;
 
-      const docAfterDelete = await this.ragflowClient.getDocument(datasetId, documentId).catch(() => null);
-      const retrievalAfterDelete = await this.ragflowClient.retrieve({ datasetIds: [datasetId], question }).catch((error) => ({ ok: false, reason: error.message, chunks: [] }));
-      check.retrieval_cleared = !docAfterDelete && (retrievalAfterDelete.chunks || []).length === 0;
+      const cleared = await verifyDocumentCleared({ ragflowClient: this.ragflowClient, datasetId, documentId, question });
+      check.retrieval_cleared = cleared.document_cleared && cleared.retrieval_cleared;
       return this.finish(check, check.retrieval_cleared ? "lifecycle_supported" : "delete_unverified", check.retrieval_cleared ? null : "document_or_retrieval_still_visible_after_delete");
     } catch (error) {
       return this.finish(check, "blocked", error.message);

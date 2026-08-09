@@ -69,10 +69,11 @@ function createDecisionLog({ conversation, inbound, aiDecision, finalDecision, t
 }
 
 export class AnswerOrchestrator {
-  constructor({ store, knowledgeService }) {
+  constructor({ store, knowledgeService, outboundSender = fakeSendText }) {
     this.store = store;
     this.knowledgeService = knowledgeService;
     this.autoAnswerConfidence = knowledgeService.config?.autoAnswerConfidence ?? 0.5;
+    this.outboundSender = outboundSender;
   }
 
   async processFakeWeChatMessage(message) {
@@ -99,7 +100,8 @@ export class AnswerOrchestrator {
       const replyPolicy = new ReplyPolicyService(state.replyPolicy);
       if (answerAllowed(tracedDecision, this.autoAnswerConfidence)) {
         const finalReply = replyPolicy.formatAnswer(tracedDecision.answer_text);
-        const outbound = fakeSendText({
+        const outbound = await this.outboundSender({
+          conversation,
           conversationId: conversation.id,
           triggerEventId: inbound.id,
           intent: "ai_answer",
@@ -122,7 +124,8 @@ export class AnswerOrchestrator {
       }
 
       const ticket = this.createTicketPath(state, conversation, inbound, tracedDecision);
-      const outbound = fakeSendText({
+      const outbound = await this.outboundSender({
+        conversation,
         conversationId: conversation.id,
         triggerEventId: inbound.id,
         intent: "handoff_ack",

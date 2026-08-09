@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { hashId, nowIso } from "../domain/ids.js";
+import { verifyDocumentCleared } from "./ragflow-lifecycle-probe-service.js";
 
 function unquote(value) {
   return value.replace(/^"(.*)"$/, "$1");
@@ -7,6 +8,23 @@ function unquote(value) {
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function isRetryableError(error) {
+  const message = String(error?.message || error || "");
+  return !message.includes("candidate must") && !message.includes("missing source content") && !message.includes("type must");
+}
+
+function scheduleRetry(syncJob, { error, maxAttempts = 3, retryDelayMs = 30000 }) {
+  const retryable = isRetryableError(error);
+  Object.assign(syncJob, {
+    status: retryable && syncJob.attempts < maxAttempts ? "retry_scheduled" : "blocked",
+    max_attempts: maxAttempts,
+    next_retry_at: retryable && syncJob.attempts < maxAttempts ? new Date(Date.now() + retryDelayMs).toISOString() : null,
+    last_error: error.message,
+    error_type: retryable ? "retryable" : "non_retryable",
+    updated_at: nowIso(),
+  });
 }
 
 export function parseFrontmatter(markdown) {
@@ -89,8 +107,15 @@ export class KnowledgeSyncService {
       dataset_name: datasetName,
       document_id: null,
       status: "started",
+      operation: "sync",
       attempts: 1,
+      max_attempts: 3,
+      next_retry_at: null,
       last_error: null,
+      error_type: null,
+      previous_document_id: null,
+      replacement_document_id: null,
+      delete_check: null,
       source_refs: [],
       parse_progress: [],
       created_at: nowIso(),
@@ -131,8 +156,94 @@ export class KnowledgeSyncService {
       Object.assign(syncJob, { dataset_id: targetDatasetId, document_id: documentId, status: parseProgress.some((item) => Number(item.progress) >= 1) ? "parsed" : "started", source_refs: sourceRefs, parse_progress: parseProgress, updated_at: nowIso() });
       return { ok: true, status: syncJob.status === "parsed" ? "sync_parsed" : "sync_started", candidatePath, datasetId: targetDatasetId, documentId, sourceRefs, parseProgress, syncJob };
     } catch (error) {
-      Object.assign(syncJob, { status: "failed", last_error: error.message, source_refs: sourceRefs, parse_progress: parseProgress, updated_at: nowIso() });
+      Object.assign(syncJob, { status: "failed", source_refs: sourceRefs, parse_progress: parseProgress });
+      scheduleRetry(syncJob, { error });
       throw error;
+    }
+  }
+
+  async retrySyncJob({ jobId, state, waitForParse = false, force = true }) {
+    if (!state) throw new Error("state is required");
+    const job = (state.knowledgeSyncJobs || []).find((item) => item.id === jobId);
+    if (!job) return { ok: false, status: "not_found", reason: "sync_job_not_found" };
+    if (job.status === "blocked") return { ok: false, status: "blocked", reason: job.last_error || "sync_job_blocked", syncJob: job };
+    job.status = "retrying";
+    job.updated_at = nowIso();
+    try {
+      return await this.syncApprovedCandidate({
+        candidatePath: job.candidate_path,
+        datasetId: job.dataset_id,
+        datasetName: job.dataset_name,
+        waitForParse,
+        state,
+        force,
+      });
+    } catch (error) {
+      return { ok: false, status: "failed", reason: error.message, syncJob: job };
+    }
+  }
+
+  async retryDueJobs({ state, now = new Date(), limit = 10, waitForParse = false }) {
+    if (!state) throw new Error("state is required");
+    const due = (state.knowledgeSyncJobs || [])
+      .filter((job) => job.status === "retry_scheduled" && job.next_retry_at && new Date(job.next_retry_at) <= new Date(now))
+      .slice(0, limit);
+    const results = [];
+    for (const job of due) results.push(await this.retrySyncJob({ jobId: job.id, state, waitForParse }));
+    return { ok: true, retried: results.filter((item) => item.ok).length, blocked: results.filter((item) => !item.ok).length, jobs: results };
+  }
+
+  async replaceApprovedCandidate({ candidatePath, datasetId = null, datasetName = `beauty_sync_${Date.now()}`, previousDocument, waitForParse = false, state = null, force = true, verifyQuestion = null }) {
+    if (!previousDocument?.document_id || !previousDocument?.dataset_id) {
+      return this.syncApprovedCandidate({ candidatePath, datasetId, datasetName, waitForParse, state, force });
+    }
+    if (!this.ragflowClient.configured) return { ok: false, status: "unconfigured", reason: "missing_ragflow_api_key" };
+    const startedAt = nowIso();
+    const job = {
+      id: hashId("sync_job", `replace:${candidatePath}:${previousDocument.document_id}:${startedAt}`),
+      idempotency_key: `replace:${candidatePath}:${previousDocument.document_id}:${startedAt}`,
+      candidate_path: candidatePath,
+      candidate_hash: null,
+      dataset_id: datasetId || previousDocument.dataset_id,
+      dataset_name: datasetName,
+      document_id: null,
+      status: "deleting_old",
+      operation: "replace",
+      attempts: 1,
+      max_attempts: 3,
+      next_retry_at: null,
+      last_error: null,
+      error_type: null,
+      previous_document_id: previousDocument.document_id,
+      replacement_document_id: null,
+      delete_check: null,
+      source_refs: [],
+      parse_progress: [],
+      created_at: startedAt,
+      updated_at: startedAt,
+    };
+    if (state) state.knowledgeSyncJobs.push(job);
+    try {
+      await this.ragflowClient.deleteDocument(previousDocument.dataset_id, previousDocument.document_id);
+      job.delete_check = await verifyDocumentCleared({ ragflowClient: this.ragflowClient, datasetId: previousDocument.dataset_id, documentId: previousDocument.document_id, question: verifyQuestion });
+      if (!job.delete_check.document_cleared || !job.delete_check.retrieval_cleared) {
+        Object.assign(job, { status: "delete_unverified", last_error: "document_or_retrieval_still_visible_after_delete", updated_at: nowIso() });
+        return { ok: false, status: "delete_unverified", reason: job.last_error, syncJob: job };
+      }
+      const result = await this.syncApprovedCandidate({ candidatePath, datasetId: datasetId || previousDocument.dataset_id, datasetName, waitForParse, state, force });
+      Object.assign(job, {
+        candidate_hash: result.syncJob?.candidate_hash || null,
+        document_id: result.documentId,
+        replacement_document_id: result.documentId,
+        source_refs: result.sourceRefs || [],
+        parse_progress: result.parseProgress || [],
+        status: "replaced",
+        updated_at: nowIso(),
+      });
+      return { ...result, status: "replaced", syncJob: job };
+    } catch (error) {
+      Object.assign(job, { status: "failed", last_error: error.message, error_type: isRetryableError(error) ? "retryable" : "non_retryable", updated_at: nowIso() });
+      return { ok: false, status: "failed", reason: error.message, syncJob: job };
     }
   }
 }
