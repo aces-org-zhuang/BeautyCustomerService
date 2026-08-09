@@ -1,0 +1,28 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": {
+    "paths": [
+      "vendor/ai/maop/.opencode/skills"
+    ]
+  },
+  "references": {
+    "maop-opencode": {
+      "path": "vendor/ai/maop/.opencode",
+      "description": "maop-owned OpenCode skills, agents, commands, and engine-side configuration reference."
+    }
+  },
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@playwright/mcp"
+      ],
+      "enabled": true,
+      "environment": {
+        "BROWSER": "chromium"
+      }
+    }
+  }
+}

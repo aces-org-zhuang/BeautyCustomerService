@@ -1,0 +1,6 @@
+[submodule "vendor/research/aces-research"]
+	path = vendor/research/aces-research
+	url = https://github.com/aces-org-zhuang/aces-research.git
+[submodule "vendor/ai/maop"]
+	path = vendor/ai/maop
+	url = https://github.com/aces-org-zhuang/maop.git
