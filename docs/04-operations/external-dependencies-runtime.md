@@ -18,6 +18,12 @@ BeautyCustomerService 主仓
 
 ## RAGFlow
 
+完整系统启动顺序、配置注入、健康检查和 `ragflow_unavailable` 排障路径见：
+
+```text
+../03-runtime/system-startup-design.md
+```
+
 主仓配置：
 
 ```text

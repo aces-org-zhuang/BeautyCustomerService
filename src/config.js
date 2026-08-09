@@ -21,5 +21,15 @@ export function loadConfig(env = process.env) {
     llmWikiBaseUrl: env.LLM_WIKI_API_BASE_URL || "http://127.0.0.1:19828",
     llmWikiApiToken: env.LLM_WIKI_API_TOKEN || "",
     llmWikiCandidatePath: env.LLM_WIKI_CANDIDATE_PATH || DEFAULT_LLM_WIKI_CANDIDATE_PATH,
+    wechatKfEnabled: env.WECHAT_KF_ENABLED === "1",
+    wechatKfSendEnabled: env.WECHAT_KF_SEND_ENABLED === "1",
+    wechatCorpId: env.WECHAT_CORP_ID || "",
+    wechatKfSecret: env.WECHAT_KF_SECRET || "",
+    wechatKfCallbackToken: env.WECHAT_KF_CALLBACK_TOKEN || "",
+    wechatKfEncodingAesKey: env.WECHAT_KF_ENCODING_AES_KEY || "",
+    wechatKfCallbackPath: env.WECHAT_KF_CALLBACK_PATH || "/api/wechat/kf/callback",
+    wechatKfApiBaseUrl: env.WECHAT_KF_API_BASE_URL || "https://qyapi.weixin.qq.com",
+    wechatKfSyncLimit: Number(env.WECHAT_KF_SYNC_LIMIT || 100),
+    wechatKfAccessTokenCacheTtlSeconds: Number(env.WECHAT_KF_ACCESS_TOKEN_CACHE_TTL_SECONDS || 6600),
   };
 }

@@ -28,7 +28,7 @@ export class KnowledgeScanService {
     this.knowledgeAnswerLoopService = knowledgeAnswerLoopService;
   }
 
-  async scanApproved({ scanRoot = "wiki/approved-answers", autoSync = false, autoWithdraw = true, state }) {
+  async scanApproved({ scanRoot = "wiki/approved-answers", autoSync = false, autoWithdraw = true, physicalWithdraw = false, physicalReplace = false, state }) {
     if (!state) throw new Error("state is required");
     if (!state.knowledgeScanRuns) state.knowledgeScanRuns = [];
     if (!state.knowledgeDocuments) state.knowledgeDocuments = [];
@@ -57,10 +57,11 @@ export class KnowledgeScanService {
       for (const path of paths) {
         const finding = await this.classifyPath(path, state);
         findings.push(finding);
-        if (autoSync && ["added", "modified"].includes(finding.change_type)) await this.syncFinding(finding, state, findings);
+        if (autoWithdraw && finding.change_type === "downgraded" && finding.requires_withdraw) await this.withdrawFinding(finding, state, { reason: finding.reason, physicalWithdraw });
+        if (autoSync && ["added", "modified"].includes(finding.change_type)) await this.syncFinding(finding, state, findings, { physicalReplace: physicalReplace && finding.change_type === "modified" });
       }
       for (const doc of state.knowledgeDocuments.filter((item) => item.lifecycle_status === "active" && item.source_path.startsWith(scanRoot) && !seen.has(item.source_path))) {
-        if (autoWithdraw) withdrawKnowledgeDocument(state, { sourcePath: doc.source_path, reason: "llm_wiki_deleted" });
+        if (autoWithdraw) await this.withdrawFinding({ source_path: doc.source_path, question: null }, state, { reason: "llm_wiki_deleted", physicalWithdraw });
         findings.push({ source_path: doc.source_path, change_type: "deleted", source_hash: null, previous_hash: doc.source_hash, document_id: doc.document_id, reason: "missing_from_scan_root" });
       }
       this.finishRun(run, "completed");
@@ -73,7 +74,7 @@ export class KnowledgeScanService {
     return { ok: run.status === "completed", status: run.status, run };
   }
 
-  async syncFinding(finding, state, findings) {
+  async syncFinding(finding, state, findings, { physicalReplace = false } = {}) {
     if (!this.knowledgeAnswerLoopService) {
       finding.sync_status = "blocked";
       finding.reason = "missing_answer_loop_service";
@@ -85,6 +86,7 @@ export class KnowledgeScanService {
       expectedAnswer: null,
       waitForParse: false,
       force: finding.change_type === "modified",
+      physicalReplace,
       state,
     });
     finding.sync_status = result.status;
@@ -96,6 +98,29 @@ export class KnowledgeScanService {
     }
   }
 
+  async withdrawFinding(finding, state, { reason, physicalWithdraw = false } = {}) {
+    if (this.knowledgeAnswerLoopService && typeof this.knowledgeAnswerLoopService.withdraw === "function") {
+      const result = await this.knowledgeAnswerLoopService.withdraw({
+        sourcePath: finding.source_path,
+        reason,
+        question: finding.question || null,
+        physicalDelete: physicalWithdraw,
+        verifyCleared: physicalWithdraw,
+        state,
+      });
+      finding.withdraw_status = result.status;
+      finding.answer_check_id = result.check?.id || null;
+      if (!result.ok) {
+        finding.change_type = "blocked";
+        finding.reason = result.reason || result.status;
+      }
+      return result;
+    }
+    withdrawKnowledgeDocument(state, { sourcePath: finding.source_path, reason });
+    finding.withdraw_status = "withdrawn";
+    return { ok: true, status: "withdrawn" };
+  }
+
   async classifyPath(path, state) {
     try {
       const markdown = await this.llmWikiClient.readFile(path);
@@ -105,8 +130,7 @@ export class KnowledgeScanService {
       const previousDoc = activeDoc || state.knowledgeDocuments.find((item) => item.source_path === path);
       const base = { source_path: path, source_hash: sourceHash, previous_hash: previousDoc?.source_hash || null, review_status: gate.data?.review_status || null, evaluation_status: gate.data?.evaluation_status || null, question: gate.data?.question || null, document_id: previousDoc?.document_id || null };
       if (!gate.ok) {
-        if (activeDoc) withdrawKnowledgeDocument(state, { sourcePath: path, reason: gate.reason });
-        return { ...base, change_type: "downgraded", reason: gate.reason };
+        return { ...base, change_type: "downgraded", reason: gate.reason, requires_withdraw: Boolean(activeDoc) };
       }
       if (!previousDoc) return { ...base, change_type: "added", reason: "new_approved_file" };
       if (previousDoc.source_hash !== sourceHash) return { ...base, change_type: "modified", reason: "hash_changed" };

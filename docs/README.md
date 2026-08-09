@@ -15,6 +15,7 @@
 | 记录架构决策 | `06-decisions/README.md` |
 | 让 LLM 按需读取上下文 | `07-llm/llm-reading-order.md` |
 | 查看已知风险 | `08-roadmap/README.md` |
+| 查看流程图和架构草图 | `09-diagrams/README.md` |
 | 查看失效模式 | `failure-modes/index.md` |
 | 查看调试记录 | `debugs/index.md` |
 | 查看实现证据 | `evidences/index.md` |
@@ -32,6 +33,7 @@
 - `06-decisions/`: ADR。
 - `07-llm/`: LLM 读取顺序、文档更新规则和上下文控制。
 - `08-roadmap/`: 风险、技术债和未来能力。
+- `09-diagrams/`: 长期可复用流程图、架构草图、状态图和时序图。
 - `failure-modes/`: 可复用失效模式。
 - `debugs/`: 复杂调试过程。
 - `evidences/`: 需求到实现证据。

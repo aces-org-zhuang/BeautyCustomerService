@@ -12,4 +12,5 @@
 - `knowledge-writeback-layering-strategy.md`: 知识回写分层、用户可理解命名、LLM Wiki 目录和状态推进策略。
 - `knowledge-change-to-answer-loop-strategy.md`: LLM Wiki CRUD、RAGFlow 更新、前端咨询生效验证的完整闭环策略。
 - `knowledge-sync-contract.md`: LLM Wiki 到 RAGFlow 的同步门禁、幂等和 sync job 契约。
+- `data-migration-design.md`: 本地 MVP 数据、LLM Wiki、RAGFlow 索引和 demo-only 数据的迁移边界、顺序、幂等、校验和回滚设计。
 - 研究来源契约见 `vendor/research/aces-research/topics/wechat-customer-service-ai-faq-feedback/implementation/`。

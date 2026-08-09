@@ -59,11 +59,12 @@
    include -> [UC6.1 解析 dataset beauty-faq] 已实现: dataset name resolve
    include -> [UC6.2 上传文档] 已实现: RagflowClient.uploadDocument
    include -> [UC6.3 触发 parse/index] 已实现: RagflowClient.parseDocument
-   include -> [UC6.4 后续检索验证] 部分实现: 主仓 answer-loop 会绑定本次同步 dataset/document 验证；真实依赖 smoke 仍需外部配置
-   include -> [UC6.5 approved-answers 扫描] 部分实现: 手动扫描可识别 added/modified/deleted/downgraded/blocked，auto_sync 仅处理新增/修改
-   include -> [UC6.6 撤回答复生效权] 部分实现: 主仓 knowledgeDocuments 可逻辑撤回/过滤 inactive 文档，RAGFlow 物理删除/替换仍需真实依赖 POC
+    include -> [UC6.4 后续检索验证] 部分实现: 主仓 answer-loop 会绑定本次同步 dataset/document 验证；真实依赖 smoke 命令已提供但仍需外部配置
+    include -> [UC6.5 approved-answers 扫描] 部分实现: 手动扫描可识别 added/modified/deleted/downgraded/blocked，auto_sync 支持新增/修改，physical_replace 可选
+    include -> [UC6.6 撤回答复生效权] 部分实现: knowledgeDocuments 可逻辑撤回/过滤 inactive 文档，physical_delete/physical_withdraw 可选调用 RAGFlow 删除并验证清理
+    include -> [UC6.7 失败重试] 部分实现: sync job 支持 retry_scheduled/retrying/blocked 和单 job/due jobs 重试入口，仍非分布式队列
    extend  -> [UC1 顾客咨询] 已实现: RAGFlow retrieval 可用于自动回复
-   缺口: 定时扫描、真实依赖自动化验收、失败重试、RAGFlow 物理删除/替换未完全固化。
+    缺口: 定时扫描、真实依赖自动化验收常态化运行、多实例可靠 retry 队列、RAGFlow 测试 dataset 清理未完全固化。
 
 [UC7 系统配置与审计] 部分实现
    include -> [UC7.1 配置 RAGFlow/LLM Wiki] 部分实现: env 配置 + GET /integrations/health
@@ -85,7 +86,7 @@
 ## 下一批优先级
 
 1. `UC5 LLM Wiki 治理`: 补清 review/draft 到 approved-answers 的晋级责任和 UI 状态，不把本地 demo 审核误认为生产审核。
-2. `UC6 RAGFlow Sync`: 固化真实依赖自动化验收、失败重试和 RAGFlow 物理删除/替换 POC。
+2. `UC6 RAGFlow Sync`: 在真实 RAGFlow/LLM Wiki 环境运行 `npm run verify:ragflow-live`，固化验收证据和测试 dataset 清理。
 3. `UC6 扫描闭环`: 增加定时扫描或事件驱动同步，并保持 blocked finding 可观测。
 4. `路由结构拆分`: 将 `src/app.js` 中 material、handoff、knowledge、integration 路由拆到独立模块，保留 `createApp` 作为组合入口。
 5. `UC7 配置与审计`: 话术禁用词校验、配置页分组、运行时权限边界。
