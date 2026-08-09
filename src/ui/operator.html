@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Beauty Customer Service Operator</title>
+    <link rel="stylesheet" href="/ui/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>BeautyCustomerService</h1>
+        <p>本地客服工作台</p>
+      </div>
+      <button id="refresh" type="button">刷新</button>
+    </header>
+
+    <main>
+      <section class="overview" aria-labelledby="overview-title">
+        <div class="section-title">
+          <h2 id="overview-title">闭环特性全景</h2>
+          <span id="runtime-mode" class="status">local-mvp</span>
+        </div>
+        <div id="pipeline" class="pipeline" aria-live="polite"></div>
+        <div id="integrations" class="integrations" aria-live="polite"></div>
+      </section>
+
+      <section class="metrics" aria-labelledby="metrics-title">
+        <h2 id="metrics-title">运行态指标</h2>
+        <div id="metrics" class="metric-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="policy-title">
+        <div class="section-title">
+          <h2 id="policy-title">话术策略</h2>
+          <span id="policy-profile" class="counter">warm_professional</span>
+        </div>
+        <form id="policy-form" class="stack compact-form">
+          <label>称呼 <input id="policy-greeting" name="greeting"></label>
+          <label>转人工模板 <input id="policy-handoff" name="handoff_template"></label>
+          <label>结尾 <input id="policy-closing" name="closing"></label>
+          <button type="submit">保存话术</button>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="health-title">
+        <div class="section-title">
+          <h2 id="health-title">真实依赖健康</h2>
+          <span class="counter">no mock</span>
+        </div>
+        <div class="actions compact-actions">
+          <button id="ragflow-lifecycle-probe" type="button">验证 RAGFlow 替换/撤回能力</button>
+        </div>
+        <div id="integration-health" class="integrations" aria-live="polite"></div>
+        <div id="ragflow-lifecycle-checks" class="list probe-list" aria-live="polite"></div>
+      </section>
+
+      <div class="layout">
+      <section class="panel composer" aria-labelledby="message-title">
+        <div class="section-title">
+          <h2 id="message-title">FakeWeChat 消息</h2>
+          <span id="status" class="status">就绪</span>
+        </div>
+        <form id="message-form" class="stack">
+          <label>
+            用户 ID
+            <input id="external-userid" name="external_userid" autocomplete="off" value="wm_local_001">
+          </label>
+          <label>
+            消息内容
+            <textarea id="message-content" name="content" rows="4" required>干皮适合做补水护理吗？</textarea>
+          </label>
+          <button type="submit">发送消息</button>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="outbox-title">
+        <div class="section-title">
+          <h2 id="outbox-title">出站消息</h2>
+          <span id="outbox-count" class="counter">0</span>
+        </div>
+        <div id="outbox" class="list" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="logs-title">
+        <div class="section-title">
+          <h2 id="logs-title">决策日志</h2>
+          <span id="log-count" class="counter">0</span>
+        </div>
+        <div id="decision-logs" class="list" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="tickets-title">
+        <div class="section-title">
+          <h2 id="tickets-title">人工工单</h2>
+          <span id="ticket-count" class="counter">0</span>
+        </div>
+        <div id="tickets" class="list" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="candidates-title">
+        <div class="section-title">
+          <h2 id="candidates-title">LLM Wiki 反哺候选</h2>
+          <span id="candidate-count" class="counter">0</span>
+        </div>
+        <div id="candidates" class="list" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="answer-checks-title">
+        <div class="section-title">
+          <h2 id="answer-checks-title">回答生效验证</h2>
+          <span id="answer-check-count" class="counter">0</span>
+        </div>
+        <div class="actions compact-actions">
+          <button id="scan-approved" type="button">扫描 LLM Wiki 已审问答</button>
+          <button id="scan-approved-sync" type="button">扫描并同步新增/修改</button>
+        </div>
+        <div id="answer-checks" class="list" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="alerts-title">
+        <div class="section-title">
+          <h2 id="alerts-title">知识告警</h2>
+          <span id="alert-count" class="counter">0</span>
+        </div>
+        <div id="alerts" class="list" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="scan-runs-title">
+        <div class="section-title">
+          <h2 id="scan-runs-title">知识变更扫描</h2>
+          <span id="scan-run-count" class="counter">0</span>
+        </div>
+        <div id="scan-runs" class="list" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="knowledge-documents-title">
+        <div class="section-title">
+          <h2 id="knowledge-documents-title">可回答知识</h2>
+          <span id="knowledge-document-count" class="counter">0</span>
+        </div>
+        <div id="knowledge-documents" class="list" aria-live="polite"></div>
+      </section>
+      </div>
+
+      <section class="panel" aria-labelledby="local-knowledge-title">
+        <div class="section-title">
+          <h2 id="local-knowledge-title">本地测试知识库</h2>
+          <span id="knowledge-count" class="counter">0</span>
+        </div>
+        <div id="local-knowledge" class="knowledge-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="materials-title">
+        <div class="section-title">
+          <h2 id="materials-title">材料蒸馏</h2>
+          <span id="material-count" class="counter">0</span>
+        </div>
+        <form id="material-form" class="stack">
+          <label>标题 <input id="material-title" name="title" value="补水护理材料"></label>
+          <label>非结构化材料 <textarea id="material-body" name="body" rows="5">补水护理适合皮肤干燥、起皮、妆前卡粉的人群。如果顾客有明显刺痛、泛红，建议先让美容师看一下。护理后当天注意保湿和防晒，避免刷酸和强清洁。</textarea></label>
+          <button type="submit">保存并蒸馏</button>
+        </form>
+        <div id="materials" class="knowledge-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="batches-title">
+        <div class="section-title">
+          <h2 id="batches-title">材料包 Staging</h2>
+          <span id="batch-count" class="counter">0</span>
+        </div>
+        <form id="batch-form" class="stack">
+          <label>材料包标题 <input id="batch-title" name="title" value="补水护理资料包"></label>
+          <label>文件 <input id="batch-files" name="files" type="file" multiple accept=".md,.txt,.pdf,.docx,.png,.jpg,.jpeg"></label>
+          <label>Markdown / 文档抽取文本 <textarea id="batch-content" name="content" rows="5"># 补水护理材料
+
+补水护理适合皮肤干燥、起皮、妆前卡粉的人群。
+
+如果顾客有明显刺痛、泛红，建议先由美容师评估。
+
+护理后当天注意保湿和防晒，避免刷酸和强清洁。</textarea></label>
+          <button type="submit">导入材料包并蒸馏</button>
+        </form>
+        <div id="batches" class="knowledge-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="published-title">
+        <div class="section-title">
+          <h2 id="published-title">本地已发布知识</h2>
+          <span id="published-count" class="counter">0</span>
+        </div>
+        <div id="published-knowledge" class="knowledge-grid" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <script src="/ui/operator.js" type="module"></script>
+  </body>
+</html>

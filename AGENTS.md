@@ -1,0 +1,100 @@
+# BeautyCustomerService Agent Rules
+
+## 语言规则
+
+本项目默认采用中文友好的交互和文档风格。必要时保留英文技术术语、代码标识、API 名称、命令和路径。
+
+## 项目定位
+
+BeautyCustomerService 是当前仓库的项目名。业务范围、技术栈、运行方式和交付目标尚未从项目配置中确认，稳定信息应后续沉淀到 `docs/`。
+
+## 工程范围
+
+- 源码域：待补充，确认技术栈后再映射到 `src/`、`apps/`、`packages/` 或框架约定目录。
+- 构建域：待补充，构建配置和产物规则需来自真实工具链。
+- 安装域：待补充，依赖安装命令需来自真实包管理器配置。
+- 测试域：待补充，测试目录和运行命令需来自真实测试配置。
+- 文档域：`docs/`。
+- 研究域：`vendor/research/aces-research/`。
+- AI 引擎域：`vendor/ai/maop/`。
+- 外部依赖域：`vendor/`。
+- 自动化域：`scripts/` 和 `.opencode/`。
+
+## 关键规则
+
+- 复杂问题定位、架构调整、文档体系演进、研究边界或 submodule 操作前，先使用 `reasoning-map` 推演。
+- 不伪造未知技术栈命令；未知命令标记为 `待补充`。
+- 新增顶层目录时，必须说明职责域、消费者和索引同步位置。
+- 真实凭据不得写入仓库、docs、evidence、日志或 `.opencode` 配置。
+- 开发规则只保留通用治理元规则；技术栈细则必须来自本项目真实配置、源码或用户确认。
+
+## 研发流水线规则
+
+- 需求、PRD、用户场景和验收标准优先使用 `product-definition`。
+- 技术方案、架构影响面、接口、状态、依赖选型和验证策略优先使用 `technical-design`。
+- 代码实现、bugfix、测试验证、代码审查和交付摘要优先使用 `implementation-delivery`。
+- 长期研究、趋势发现、论文建模、证据包和仓库研究优先使用 `research`，产物写入研究区。
+- 复杂影响面、问题定位、docs 体系、研究区、submodule 和 `.opencode` 规划前使用 `reasoning-map`。
+
+## 质量门禁
+
+- Reasoning Gate：复杂或高影响变更前先推演影响面和 RED/GREEN 节点。
+- Preview Gate：高成本表达产物、复杂 Mermaid、前端 UI 或多模态产物落盘前先给出可评审预览或范围说明。
+- Review Gate：关键需求、技术设计、实现交付或研究结论应有复核；高风险节点目标评分不低于 80。
+- POC Gate：高风险实现、未知依赖或不可逆集成先做最小 POC。
+- Verification Gate：声明完成前必须提供 fresh verification evidence；无法运行时说明原因、降级证据和残余风险。
+- Confidence Gate：声称 90%+ 置信度必须有验证证据、覆盖边界和未覆盖风险说明。
+- Stop Rule：发现会放大错误的 RED 节点时，先收敛或请求确认，不继续扩大产物范围。
+
+## 文档规则
+
+- 长期稳定知识放在 `docs/`。
+- 非研究类阶段性工程记录放在 `guides/`。
+- 研究过程、论文、开源仓库对比和证据包放在 `vendor/research/aces-research/`。
+- 新增、重命名或删除索引型文件时，必须同步对应 README 或 index。
+
+## 研究区规则
+
+- 研究区是必建部分：`vendor/research/aces-research/` -> `https://github.com/aces-org-zhuang/aces-research.git`。
+- 研究区不进入默认项目上下文；只有研究任务才读取研究区 `index.md` 和目标课题。
+- 研究参考仓必须放在具体课题 `topics/<research_slug>/repos/<repo_name>`，优先 Git submodule。
+
+## AI 引擎规则
+
+- AI 引擎是必建 submodule：`vendor/ai/maop/` -> `https://github.com/aces-org-zhuang/maop.git`。
+- `vendor/ai/maop/` 使用 sparse-checkout，只检出 `.opencode` 和 `README.md`。
+- 项目仓 `.opencode/opencode.json` 作为桥接配置，必须引用 `vendor/ai/maop/.opencode/skills` 和 `maop-opencode` reference。
+- `vendor/ai/maop/.opencode/` 属于 maop 仓库，由 maop 独立演进；项目仓不复制或覆盖 maop 的 `.opencode`。
+
+## Submodule 提交规则
+
+- 修改 submodule 内容时，必须在 submodule 仓库内独立分支、提交、推送并创建 PR。
+- 主仓只提交远端可见的 submodule 指针，并在主仓 PR 中关联对应 submodule PR。
+- 不提交只存在本地、远端不可见的 submodule commit 指针。
+- 新增、移动或删除长期 submodule 时，同步 `.gitmodules` 和 `docs/02-development/submodules-index.md`。
+
+## 项目结构
+
+```text
+README.md                  项目入口、命令占位和导航
+AGENTS.md                  LLM 协作和治理规则
+docs/                      长期稳定知识与索引
+guides/                    非研究类阶段性工程记录
+scripts/                   可重复执行的自动化脚本
+vendor/research/aces-research/  研究工作区 submodule
+vendor/ai/maop/            AI 引擎 submodule
+.opencode/                 项目 OpenCode 桥接配置
+```
+
+## 常用命令
+
+```bash
+待补充  # 安装依赖
+待补充  # 本地开发
+待补充  # 测试
+待补充  # 构建
+```
+
+## OpenCode 本地配置
+
+项目本地 OpenCode 桥接配置位于 `.opencode/opencode.json`。它引用 `vendor/ai/maop/.opencode/skills`，保证项目开发时可使用 maop AI 引擎能力。修改 maop skill、agent、command 或项目 `opencode.json` 后，需要重启 OpenCode 才会生效。

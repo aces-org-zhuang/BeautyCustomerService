@@ -1,0 +1,41 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs
+*.log
+logs/
+
+# Local MVP runtime state
+data/*.json
+!data/.gitkeep
+
+# Caches
+.cache/
+.tmp/
+tmp/
+temp/
+.playwright-mcp/
+
+# Build outputs
+dist/
+build/
+out/
+coverage/
+
+# Dependencies
+node_modules/
+vendor/**/node_modules/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
