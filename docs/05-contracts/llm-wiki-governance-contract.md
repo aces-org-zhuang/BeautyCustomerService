@@ -36,7 +36,7 @@ POST /materials/:id/publish-to-llm-wiki
 行为：
 
 - 写入 `distillation.source_material.path`。
-- 写入每个 `faq_candidate` 到 `wiki/review/<candidate_id>.md` 或 candidate 已指定路径。
+- 写入每个 `faq_candidate` 到 candidate 已指定路径；新写入优先使用 `wiki/draft-answers/<candidate_id>.md`，`wiki/review/<candidate_id>.md` 仅作为旧数据兼容路径。
 - 写入成功后，本地 candidate 更新为：
 
 ```js
@@ -65,7 +65,7 @@ POST /knowledge/feedback-candidates/:id/publish-to-llm-wiki
 行为：
 
 - 读取本地 `feedbackCandidates` 中的指定 candidate。
-- 写入 `candidate.llm_wiki_artifact.path`，缺省为 `wiki/review/<candidate_id>.md`。
+- 写入 `candidate.llm_wiki_artifact.path`；缺省为 `wiki/draft-answers/<candidate_id>.md`，`wiki/review/<candidate_id>.md` 仅作为旧数据兼容路径。
 - 写入内容必须是 `type: faq_candidate`，并保留 `question`、`answer`、`review_status`、`evaluation_status` 和 `sources`。
 - 写入成功后，本地 candidate 更新为 `governance_target=llm_wiki`、`llm_wiki_artifact.status=written`。
 
@@ -108,5 +108,6 @@ Answer: 候选答案
 
 - `pending_llm_wiki` 只表示等待治理，不是 LLM Wiki 事实。
 - 只有 LLM Wiki 写入成功后才能标记 `governance_target=llm_wiki`。
+- 默认扫描事实源是 `wiki/approved-answers/`；draft/review 文件即使 frontmatter 已变为 approved，也应先由 LLM Wiki 人工移动/重写到 approved-answers，或由调用方显式传入 candidate path 并接受后端门禁校验。
 - 只有 LLM Wiki 读取到 `approved + pass/passed + sources` 后，才可进入 RAGFlow sync。
 - 本地审核或本地发布不能替代 LLM Wiki 治理事实。

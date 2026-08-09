@@ -14,8 +14,10 @@ export class RagflowKnowledgeService {
       const live = await this.tryRagflowRetrieval(question, state);
       if (live.decision !== "handoff" || live.handoff_reason !== "ragflow_unavailable") return live;
     }
-    const localPublished = this.publishedAnswer(question, state);
-    if (localPublished) return localPublished;
+    if (this.config.enableDemoPublishedKnowledge) {
+      const localPublished = this.publishedAnswer(question, state);
+      if (localPublished) return localPublished;
+    }
     if (this.config.enableLocalTestKnowledge) {
       return this.localAnswer(question);
     }
@@ -104,8 +106,8 @@ export class RagflowKnowledgeService {
     return this.config.enableLocalTestKnowledge ? LOCAL_TEST_KNOWLEDGE : [];
   }
 
-  async tryRagflowRetrieval(question, state = null) {
-    const resolvedDatasets = await this.ragflowClient.resolveDatasetIds({ datasetIds: this.config.ragflowDatasetIds, datasetNames: this.config.ragflowDatasetNames }).catch((error) => ({ ok: false, reason: error.message }));
+  async tryRagflowRetrieval(question, state = null, options = {}) {
+    const resolvedDatasets = await this.ragflowClient.resolveDatasetIds({ datasetIds: options.datasetIds || this.config.ragflowDatasetIds, datasetNames: options.datasetNames || this.config.ragflowDatasetNames }).catch((error) => ({ ok: false, reason: error.message }));
     if (!resolvedDatasets.ok) {
       return {
         decision: "handoff",

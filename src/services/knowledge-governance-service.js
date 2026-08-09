@@ -34,7 +34,7 @@ export function publishCandidate(state, candidate) {
     match: [candidate.question],
     confidence: 0.82,
     support_status: "supported",
-    publication_target: "local_published_knowledge",
+    publication_target: "demo_local_published_knowledge",
     created_at: nowIso(),
   };
   const existingIndex = state.publishedKnowledge.findIndex((entry) => entry.id === item.id);
@@ -42,6 +42,6 @@ export function publishCandidate(state, candidate) {
   else state.publishedKnowledge.push(item);
   candidate.published_at = item.created_at;
   candidate.ragflow_sync_allowed = false;
-  candidate.ragflow_sync = { target: "local_published_knowledge", status: "published_local", reason: "local_mvp_publish" };
+  candidate.ragflow_sync = { target: "demo_local_published_knowledge", status: "demo_published_local", reason: "demo_local_mvp_publish" };
   return { ok: true, candidate, published: item };
 }

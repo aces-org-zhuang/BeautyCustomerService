@@ -40,6 +40,12 @@ npm run verify
 
 当前主仓是 Node.js 标准库 ESM 服务，没有传统编译产物或 `dist/`。统一启动入口是 `src/server.js`，统一配置入口是 `src/config.js`，运行时配置见 `.env.example` 和 `docs/03-runtime/local-service-runtime.md`。
 
+## 知识生效路径边界
+
+本地 demo 路径：`feedback candidate -> 本地审核/本地评估 -> publish-local -> publishedKnowledge`。该路径默认关闭，只在 `BCS_ENABLE_DEMO_PUBLISHED_KNOWLEDGE=1` 时用于本地 fallback/demo，不代表生产 RAGFlow 生效。
+
+生产路径：`feedback/material candidate -> 写入 LLM Wiki 待审区 -> LLM Wiki 人工审核与评估 -> approved-answers -> 主仓扫描或手动 sync -> RAGFlow -> 主仓咨询验证 -> knowledgeDocuments 生效注册`。只有 LLM Wiki 文件满足 `approved + pass/passed + sources` 门禁并通过回答验证，才显示为已生效。
+
 ## 本地 MVP 接口
 
 默认端口：`8787`。
@@ -77,13 +83,13 @@ GET  /knowledge/local-test
 GET  /knowledge/published
 POST /knowledge/feedback-candidates/:id/review
 POST /knowledge/feedback-candidates/:id/evaluate
-POST /knowledge/feedback-candidates/:id/publish-local
+POST /knowledge/feedback-candidates/:id/publish-local  # demo-only，默认禁用
 POST /knowledge/sync/llm-wiki-to-ragflow
 ```
 
 `/operator` 会展示本地 MVP 闭环全景和真实依赖健康状态。RAGFlow、LLM Wiki 和 RAGFlow Sync 只有在对应 env 配置存在并通过真实 HTTP 客户端调用时才启用；缺配置时显示 `unconfigured`，不会伪装成已集成。默认 RAGFlow dataset 名称为 `beauty-faq`，默认 LLM Wiki candidate path 为 `wiki/queries/xiaoqipao-oily-skin.md`，对应主仓 `knowledge/llm-wiki-beauty` 项目。
 当前本地测试知识库位于 `src/knowledge/local-test-knowledge.js`，默认关闭；仅设置 `BCS_ENABLE_LOCAL_TEST_KNOWLEDGE=1` 时用于演示 AI 自动回复命中。未命中、低置信或高风险问题仍会转人工，并在出站消息中生成转人工提示。
-本地服务 MVP 支持人工回复反哺闭环：feedback candidate 审核通过、本地评估通过、发布到本地知识后，后续相同问题会命中 `publishedKnowledge` 自动回复。该本地发布不等同于 RAGFlow 生产 KB 同步。
+本地服务 MVP 支持人工回复反哺闭环：feedback candidate 审核通过、本地评估通过、显式开启 demo 开关后发布到本地知识，后续相同问题可命中 `publishedKnowledge` 自动回复。该本地发布不等同于 RAGFlow 生产 KB 同步，生产生效以 LLM Wiki `approved-answers` 到 RAGFlow 的同步和验证为准。
 `POST /knowledge/sync/llm-wiki-to-ragflow` 可传 `dataset_id` 或 `dataset_name`；默认会解析 `RAGFLOW_DATASET_NAMES=beauty-faq` 并写入既有 RAGFlow dataset。若 dataset 名称无法解析，接口返回 `409/unconfigured`；只有显式传 `create_dataset: true` 时才新建 dataset。
 真实 RAGFlow 自动回复阈值由 `BCS_AUTO_ANSWER_CONFIDENCE` 控制，默认 `0.3`；回答仍必须是 `supported` 且带 source ref 才会发送。当前 `beauty-faq` 对“干皮适合做补水护理吗？”的实测 similarity 约为 `0.3378`，因此默认阈值需要低于该值才能与 RAGFlow 平台表现一致。
 RAGFlow 默认启用：只要 `RAGFLOW_API_KEY` 存在且 `RAGFLOW_DATASET_IDS` 或 `RAGFLOW_DATASET_NAMES` 可解析，服务会使用真实 RAGFlow retrieval。设置 `BCS_USE_RAGFLOW=0` 可强制关闭真实检索；此时 UI 显示 `configured_disabled`。

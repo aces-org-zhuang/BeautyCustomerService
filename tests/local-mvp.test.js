@@ -103,13 +103,13 @@ test("knowledge provider does not use local fixtures unless explicitly enabled",
   }
 });
 
-test("reviewed and evaluated feedback candidate publishes to local knowledge", async () => {
+test("reviewed and evaluated feedback candidate publishes to demo local knowledge", async () => {
   const dir = await mkdtemp(join(tmpdir(), "bcs-test-"));
   try {
     const store = new JsonStore(join(dir, "store.json"));
     const orchestrator = new AnswerOrchestrator({
       store,
-      knowledgeService: new RagflowKnowledgeService({ useRagflow: false, enableLocalTestKnowledge: false }),
+      knowledgeService: new RagflowKnowledgeService({ useRagflow: false, enableLocalTestKnowledge: false, enableDemoPublishedKnowledge: true }),
     });
 
     const handoff = await orchestrator.processFakeWeChatMessage({
@@ -133,6 +133,7 @@ test("reviewed and evaluated feedback candidate publishes to local knowledge", a
     assert.equal(evaluateCandidate(storedCandidate, { result: "pass" }).ok, true);
     const published = publishCandidate(state, storedCandidate);
     assert.equal(published.ok, true);
+    assert.equal(published.published.publication_target, "demo_local_published_knowledge");
     await store.save(state);
 
     const answer = await orchestrator.processFakeWeChatMessage({
@@ -147,6 +148,54 @@ test("reviewed and evaluated feedback candidate publishes to local knowledge", a
     assert.equal(finalState.decisionLogs.at(-1).factual_answer, "建议根据皮肤状态决定，短期内优先做好保湿和防晒。");
     assert.match(finalState.decisionLogs.at(-1).final_reply, /亲/);
   } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("demo published knowledge is ignored unless explicitly enabled", async () => {
+  const state = {
+    publishedKnowledge: [{ id: "published_001", answer: "本地发布答案", match: ["护理后可以化妆吗？"], source_refs: ["demo_source"] }],
+  };
+  const disabled = new RagflowKnowledgeService({ useRagflow: false, enableLocalTestKnowledge: false, enableDemoPublishedKnowledge: false });
+  const enabled = new RagflowKnowledgeService({ useRagflow: false, enableLocalTestKnowledge: false, enableDemoPublishedKnowledge: true });
+
+  const blocked = await disabled.answer("护理后可以化妆吗？", state);
+  const answered = await enabled.answer("护理后可以化妆吗？", state);
+
+  assert.equal(blocked.decision, "handoff");
+  assert.equal(blocked.handoff_reason, "knowledge_provider_not_configured");
+  assert.equal(answered.decision, "answer");
+  assert.equal(answered.answer_text, "本地发布答案");
+});
+
+test("publish-local endpoint is blocked unless demo local publish is enabled", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "bcs-test-"));
+  const server = (await import("node:http")).createServer((await import("../src/app.js")).createApp({ dataFile: join(dir, "store.json") }));
+  try {
+    const store = new JsonStore(join(dir, "store.json"));
+    const state = await store.load();
+    const candidate = {
+      id: "candidate_demo_001",
+      question: "护理后可以化妆吗？",
+      answer: "建议根据皮肤状态决定。",
+      source_refs: ["wiki/sources/source.md"],
+      review_status: "approved",
+      evaluation_status: "pass",
+    };
+    candidate.publication_decision = { publication_decision: "publish", reason: "ready" };
+    state.feedbackCandidates.push(candidate);
+    await store.save(state);
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+    const response = await fetch(`${baseUrl}/knowledge/feedback-candidates/${candidate.id}/publish-local`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const body = await response.json();
+
+    assert.equal(response.status, 409);
+    assert.equal(body.status, "demo_only_disabled");
+    assert.equal(body.reason, "publish_local_disabled");
+  } finally {
+    server.close();
     await rm(dir, { recursive: true, force: true });
   }
 });
@@ -466,6 +515,122 @@ test("knowledge answer loop records synced answer verification", async () => {
   assert.equal(state.knowledgeAnswerChecks[0].answer_check_status, "answer_changed");
   assert.equal(state.knowledgeDocuments[0].document_id, "doc_answer_loop_001");
   assert.equal(state.knowledgeDocuments[0].lifecycle_status, "active");
+});
+
+test("knowledge answer loop blocks when sync returns ok false", async () => {
+  const reads = new Map([["wiki/approved-answers/candidate.md", [
+    "---",
+    "type: faq_candidate",
+    "review_status: approved",
+    "evaluation_status: pass",
+    "question: \"补水护理适合干皮吗？\"",
+    "sources:",
+    "  - wiki/sources/source.md",
+    "---",
+    "Answer: 适合干燥和起皮人群。",
+  ].join("\n")]]);
+  const service = new KnowledgeAnswerLoopService({
+    llmWikiClient: { async readFile(path) { return reads.get(path); } },
+    knowledgeSyncService: { async syncApprovedCandidate() { return { ok: false, status: "unconfigured", reason: "missing_ragflow_api_key" }; } },
+    knowledgeService: { async answer() { return { decision: "answer", answer_text: "适合干燥和起皮人群。", source_refs: ["doc_unrelated"] }; } },
+  });
+  const state = { knowledgeAnswerChecks: [], knowledgeDocuments: [] };
+
+  const result = await service.syncAndVerify({ candidatePath: "wiki/approved-answers/candidate.md", expectedAnswer: "适合干燥", state });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.status, "sync_blocked");
+  assert.equal(result.reason, "missing_ragflow_api_key");
+  assert.equal(state.knowledgeAnswerChecks[0].answer_check_status, "sync_blocked");
+  assert.equal(state.knowledgeDocuments.length, 0);
+});
+
+test("knowledge answer loop blocks when sync has no document id", async () => {
+  const reads = new Map([["wiki/approved-answers/candidate.md", [
+    "---",
+    "type: faq_candidate",
+    "review_status: approved",
+    "evaluation_status: pass",
+    "question: \"补水护理适合干皮吗？\"",
+    "sources:",
+    "  - wiki/sources/source.md",
+    "---",
+    "Answer: 适合干燥和起皮人群。",
+  ].join("\n")]]);
+  const service = new KnowledgeAnswerLoopService({
+    llmWikiClient: { async readFile(path) { return reads.get(path); } },
+    knowledgeSyncService: { async syncApprovedCandidate() { return { ok: true, status: "sync_started", datasetId: "dataset_001", documentId: null }; } },
+    knowledgeService: { async answer() { return { decision: "answer", answer_text: "适合干燥和起皮人群。", source_refs: [] }; } },
+  });
+  const state = { knowledgeAnswerChecks: [], knowledgeDocuments: [] };
+
+  const result = await service.syncAndVerify({ candidatePath: "wiki/approved-answers/candidate.md", expectedAnswer: "适合干燥", state });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.status, "sync_blocked");
+  assert.equal(result.reason, "missing_synced_document_id");
+  assert.equal(state.knowledgeAnswerChecks[0].answer_check_status, "sync_blocked");
+  assert.equal(state.knowledgeDocuments.length, 0);
+});
+
+test("knowledge answer loop blocks when sync has no dataset id", async () => {
+  const reads = new Map([["wiki/approved-answers/candidate.md", [
+    "---",
+    "type: faq_candidate",
+    "review_status: approved",
+    "evaluation_status: pass",
+    "question: \"补水护理适合干皮吗？\"",
+    "sources:",
+    "  - wiki/sources/source.md",
+    "---",
+    "Answer: 适合干燥和起皮人群。",
+  ].join("\n")]]);
+  const service = new KnowledgeAnswerLoopService({
+    llmWikiClient: { async readFile(path) { return reads.get(path); } },
+    knowledgeSyncService: { async syncApprovedCandidate() { return { ok: true, status: "sync_started", datasetId: null, documentId: "doc_001" }; } },
+    knowledgeService: { async answer() { return { decision: "answer", answer_text: "适合干燥和起皮人群。", source_refs: ["doc_001"] }; } },
+  });
+  const state = { knowledgeAnswerChecks: [], knowledgeDocuments: [] };
+
+  const result = await service.syncAndVerify({ candidatePath: "wiki/approved-answers/candidate.md", expectedAnswer: "适合干燥", state });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.status, "sync_blocked");
+  assert.equal(result.reason, "missing_synced_dataset_id");
+  assert.equal(state.knowledgeAnswerChecks[0].answer_check_status, "sync_blocked");
+  assert.equal(state.knowledgeDocuments.length, 0);
+});
+
+test("knowledge answer loop verifies against synced dataset id", async () => {
+  const reads = new Map([["wiki/approved-answers/candidate.md", [
+    "---",
+    "type: faq_candidate",
+    "review_status: approved",
+    "evaluation_status: pass",
+    "question: \"补水护理适合干皮吗？\"",
+    "sources:",
+    "  - wiki/sources/source.md",
+    "---",
+    "Answer: 适合干燥和起皮人群。",
+  ].join("\n")]]);
+  const calls = [];
+  const service = new KnowledgeAnswerLoopService({
+    llmWikiClient: { async readFile(path) { return reads.get(path); } },
+    knowledgeSyncService: { async syncApprovedCandidate() { return { ok: true, status: "sync_started", datasetId: "dataset_synced", documentId: "doc_synced", syncJob: { id: "sync_job_001" } }; } },
+    knowledgeService: {
+      async tryRagflowRetrieval(question, state, options) {
+        calls.push({ question, options });
+        return { decision: "answer", answer_text: "适合干燥和起皮人群。", source_refs: ["doc_synced"] };
+      },
+    },
+  });
+  const state = { knowledgeAnswerChecks: [], knowledgeDocuments: [] };
+
+  const result = await service.syncAndVerify({ candidatePath: "wiki/approved-answers/candidate.md", expectedAnswer: "适合干燥", state });
+
+  assert.equal(result.status, "answer_changed");
+  assert.deepEqual(calls[0].options.datasetIds, ["dataset_synced"]);
+  assert.deepEqual(calls[0].options.datasetNames, []);
 });
 
 test("knowledge document registry supersedes old document for the same source path", () => {

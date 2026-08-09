@@ -48,7 +48,7 @@ export class KnowledgeLifecycleService {
     const artifacts = [{ type: "source_material", path: sourceMaterial.path, status: "written" }];
 
     for (const candidate of distillation.faq_candidates || []) {
-      const path = candidate.llm_wiki_artifact?.path || `wiki/review/${candidate.id}.md`;
+      const path = candidate.llm_wiki_artifact?.path || `wiki/draft-answers/${candidate.id}.md`;
       await this.llmWikiClient.writeFile(path, candidateMarkdown(candidate));
       candidate.governance_target = "llm_wiki";
       candidate.llm_wiki_artifact = { path, status: "written", written_at: nowIso() };
@@ -63,7 +63,7 @@ export class KnowledgeLifecycleService {
     if (!this.llmWikiClient.configured) return { ok: false, status: "unconfigured", reason: "missing_llm_wiki_base_url" };
     if (!candidate.source_refs || candidate.source_refs.length === 0) return { ok: false, reason: "missing_source_refs" };
 
-    const path = candidate.llm_wiki_artifact?.path || `wiki/review/${candidate.id}.md`;
+    const path = candidate.llm_wiki_artifact?.path || `wiki/draft-answers/${candidate.id}.md`;
     await this.llmWikiClient.writeFile(path, candidateMarkdown(candidate));
     candidate.governance_target = "llm_wiki";
     candidate.llm_wiki_artifact = { path, status: "written", written_at: nowIso() };

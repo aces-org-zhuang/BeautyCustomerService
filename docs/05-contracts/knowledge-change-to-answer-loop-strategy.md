@@ -12,13 +12,16 @@
 - 读取 LLM Wiki candidate 的审核和评估状态。
 - 只允许 `approved + pass/passed + sources` 的 candidate 同步到 RAGFlow。
 - 通过 RAGFlow retrieval 影响用户咨询答案。
+- 手动扫描 LLM Wiki `approved-answers`，识别新增、修改、删除、降级、未变化和阻断项。
+- 对新增/修改项执行显式 auto sync，并用本次同步 dataset/document 做回答验证。
+- 通过 `knowledgeDocuments` 生效注册表逻辑撤回 inactive/superseded 文档，避免最终回答继续使用旧知识。
 
-当前主仓尚未完整具备以下能力：
+当前仍未验证或延后的能力：
 
-- 自动发现 LLM Wiki 内的新增、修改、删除。
-- 对 RAGFlow 中旧 document 做替换或删除。
-- 把 LLM Wiki 删除、驳回、降级同步成 RAGFlow 撤回。
-- 自动证明某次知识变更已经改变用户咨询结果。
+- 定时扫描或事件驱动自动发现 LLM Wiki 变化。
+- 对 RAGFlow 中旧 document 做物理替换、删除或停用。
+- 失败重试和真实依赖自动化验收。
+- 真实微信 live channel 中的用户咨询验证。
 
 ## 闭环总览
 

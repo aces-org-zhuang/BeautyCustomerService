@@ -60,7 +60,7 @@ export function createFeedbackCandidate(ticket, answerText) {
     handoff_reason: ticket.reason,
     governance_target: "pending_llm_wiki",
     llm_wiki_artifact: {
-      path: `wiki/review/${hashId("candidate", `${ticket.id}:${answerText}`)}.md`,
+      path: `wiki/draft-answers/${hashId("candidate", `${ticket.id}:${answerText}`)}.md`,
       status: "not_written",
     },
     review_status: "review",
@@ -70,7 +70,7 @@ export function createFeedbackCandidate(ticket, answerText) {
     published_at: null,
     ragflow_sync_allowed: false,
     ragflow_sync: {
-      target: "RAGFlow production KB",
+      target: "LLM Wiki approved-answers -> RAGFlow",
       status: "blocked",
       reason: "review_and_evaluation_required",
     },

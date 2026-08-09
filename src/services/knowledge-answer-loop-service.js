@@ -66,11 +66,14 @@ export class KnowledgeAnswerLoopService {
     } catch (error) {
       return this.recordBlocked({ state, candidatePath, candidateHash, question: verificationQuestion, expectedAnswer, reason: error.message });
     }
+    if (!syncResult.ok) return this.recordBlocked({ state, candidatePath, candidateHash, question: verificationQuestion, expectedAnswer, reason: syncResult.reason || syncResult.status || "sync_failed" });
+    if (!syncResult.datasetId) return this.recordBlocked({ state, candidatePath, candidateHash, question: verificationQuestion, expectedAnswer, reason: "missing_synced_dataset_id" });
+    if (!syncResult.documentId) return this.recordBlocked({ state, candidatePath, candidateHash, question: verificationQuestion, expectedAnswer, reason: "missing_synced_document_id" });
 
-    const answerResult = await this.knowledgeService.answer(verificationQuestion, state).catch((error) => ({ decision: "handoff", answer_text: null, source_refs: [], provider_error: error.message }));
+    const answerResult = await this.verifyAnswer(verificationQuestion, state, syncResult).catch((error) => ({ decision: "handoff", answer_text: null, source_refs: [], provider_error: error.message }));
     const matchedDocument = syncResult.documentId && (answerResult.source_refs || []).includes(syncResult.documentId);
     const matchedExpected = includesExpectedAnswer(answerResult.answer_text, expectedAnswer);
-    const answerChanged = answerResult.decision === "answer" && matchedExpected && (matchedDocument || !syncResult.documentId);
+    const answerChanged = answerResult.decision === "answer" && matchedExpected && matchedDocument;
     const status = answerChanged ? "answer_changed" : "answer_unchanged";
     const failureReason = answerChanged ? null : answerResult.provider_error || "verification_answer_did_not_match_synced_document";
     if (syncResult.documentId) {
@@ -112,5 +115,12 @@ export class KnowledgeAnswerLoopService {
   extractQuestion(markdown) {
     const match = markdown.match(/^question:\s*"?([^"\n]+)"?$/m);
     return match ? match[1].trim() : null;
+  }
+
+  async verifyAnswer(question, state, syncResult) {
+    if (typeof this.knowledgeService.tryRagflowRetrieval === "function") {
+      return this.knowledgeService.tryRagflowRetrieval(question, state, { datasetIds: [syncResult.datasetId].filter(Boolean), datasetNames: [] });
+    }
+    return this.knowledgeService.answer(question, state, { datasetIds: [syncResult.datasetId].filter(Boolean), datasetNames: [] });
   }
 }

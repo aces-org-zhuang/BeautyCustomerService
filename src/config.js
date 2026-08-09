@@ -17,6 +17,7 @@ export function loadConfig(env = process.env) {
     useRagflow: env.BCS_USE_RAGFLOW !== "0",
     autoAnswerConfidence: Number(env.BCS_AUTO_ANSWER_CONFIDENCE || 0.3),
     enableLocalTestKnowledge: env.BCS_ENABLE_LOCAL_TEST_KNOWLEDGE === "1",
+    enableDemoPublishedKnowledge: env.BCS_ENABLE_DEMO_PUBLISHED_KNOWLEDGE === "1",
     llmWikiBaseUrl: env.LLM_WIKI_API_BASE_URL || "http://127.0.0.1:19828",
     llmWikiApiToken: env.LLM_WIKI_API_TOKEN || "",
     llmWikiCandidatePath: env.LLM_WIKI_CANDIDATE_PATH || DEFAULT_LLM_WIKI_CANDIDATE_PATH,
