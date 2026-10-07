@@ -8,7 +8,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `vendor/research/aces-research` | `https://github.com/aces-org-zhuang/aces-research.git` | 研究过程、论文、开源对比、证据包 | 研究任务、论文任务、证据验证任务 | `git submodule status --recursive` | 已添加，pinned `b2025592f1b5a5b37f1ca538ab6dfcf091e74e36` |
 | `vendor/ai/maop` | `https://github.com/aces-org-zhuang/maop.git` | maop-owned AI 引擎和 OpenCode 能力面 | `.opencode/opencode.json` | `git -C vendor/ai/maop sparse-checkout list` 应包含 `/.opencode/` 和 `/README.md`；`git -C vendor/ai/maop branch -r --contains <pinned>` 应包含 `origin/main` | 已添加，pinned `c5269031d9ca90889357c67da4869929c3377fa2`，已启用 sparse-checkout，commit 已在 `origin/main` 可见 |
-| `vendor/design/aces-design` | `https://github.com/aces-org-zhuang/design-beauty.git` | 架构模型、视图、时序图、部署视图（`src/**/*.c4`）；不含需与代码同 PR 的内容 | `.opencode/opencode.json` 的 `likec4` MCP；开发者经 `likec4 serve` 浏览 | `git -C vendor/design/aces-design rev-parse --short HEAD`；`npm run validate` 在设计仓内执行 | 已添加，pinned `6d24877df2e8bf7a6173a1b63aec16e0143a10fd`，**未启用 sparse-checkout**（LikeC4 需要完整工作区），主仓不构建 |
+| `vendor/design/aces-design` | `https://github.com/aces-org-zhuang/design-beauty.git` | 架构模型、视图、时序图、部署视图（`src/**/*.c4`）；不含需与代码同 PR 的内容 | `.opencode/opencode.json` 的 `likec4` MCP；开发者经 `likec4 serve` 浏览 | `git -C vendor/design/aces-design rev-parse --short HEAD`；`npm run validate` 在设计仓内执行 | 已添加，pinned `460045f8df848390716039fb0d4f76d6b83289af`（架构模型中文化 + 移除多余 config），**未启用 sparse-checkout**（LikeC4 需要完整工作区），主仓不构建 |
 
 ## 设计仓条目说明
 
@@ -34,6 +34,26 @@
 ### 更新策略
 
 固定 commit，不自动跟随。设计仓发版后由本仓开 PR 更新 submodule 指针。gitlink 不会自动同步。
+
+### 指针同步检查
+
+设计仓有独立 CI，无法在本仓 CI 里直接感知它是否发版。用以下命令检查指针是否落后：
+
+```bash
+# 设计仓远端最新 commit
+git ls-remote https://github.com/aces-org-zhuang/design-beauty.git refs/heads/main
+
+# 本仓记录的指针
+git ls-tree HEAD vendor/design/aces-design
+```
+
+两者不一致时，按顺序处理：
+
+1. 在本仓开 PR，只改 `vendor/design/aces-design` 的 gitlink 与本索引的 `pinned` 值
+2. 同步 `AGENTS.md` 中如有需要更新的架构描述
+3. 合并后通知使用者重启 OpenCode（MCP 的 `LIKEC4_WORKSPACE` 路径不变，但模型内容已更新）
+
+指针落后不影响主仓构建与测试，只会让 AI 读到旧架构上下文。因此它属于**需要修复但不阻塞交付**的问题。
 
 ## 规则
 
