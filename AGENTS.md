@@ -32,6 +32,8 @@ BeautyCustomerService 是当前仓库的项目名。业务范围、技术栈、�
 
 - 需求、PRD、用户场景和验收标准优先使用 `product-definition`。
 - 技术方案、架构影响面、接口、状态、依赖选型和验证策略优先使用 `technical-design`。
+- 架构模型（LikeC4 `.c4`）、上下文图、容器图、组件图、部署图、场景流程图、时序图、架构漂移检测和跨项目架构视图优先使用 `architecture-design`；模型写入 `vendor/design/aces-design`。
+- 依赖关系或部署形态变更时，先用 `architecture-design` 经 `likec4` MCP 查询影响面，再改代码，并在同一 PR 更新设计仓模型。
 - 代码实现、bugfix、测试验证、代码审查和交付摘要优先使用 `implementation-delivery`。
 - 长期研究、趋势发现、论文建模、证据包和仓库研究优先使用 `research`，产物写入研究区。
 - 复杂影响面、问题定位、docs 体系、研究区、submodule 和 `.opencode` 规划前使用 `reasoning-map`。
@@ -66,6 +68,18 @@ BeautyCustomerService 是当前仓库的项目名。业务范围、技术栈、�
 - 项目仓 `.opencode/opencode.json` 作为桥接配置，必须引用 `vendor/ai/maop/.opencode/skills` 和 `maop-opencode` reference。
 - `vendor/ai/maop/.opencode/` 属于 maop 仓库，由 maop 独立演进；项目仓不复制或覆盖 maop 的 `.opencode`。
 
+## 设计仓规则
+
+- 设计仓是必建 submodule：`vendor/design/aces-design/` -> `https://github.com/aces-org-zhuang/design-beauty.git`。
+- 设计仓承载架构即代码：组件划分、集成关系、部署形态、时序流程（`src/**/*.c4`）。
+- 设计仓**不启用** sparse-checkout；LikeC4 需要完整工作区才能 `validate` 与 `build`。这与 `vendor/ai/maop` 的规则相反，不要照搬。
+- 项目 `.opencode/opencode.json` 配置 `likec4` MCP，`LIKEC4_WORKSPACE` 指向 `vendor/design/aces-design`；修改配置后需重启 OpenCode。
+- 主仓**不构建**设计仓（索引 `build_entry` 为 `none`）；`likec4 validate` / `build` 由设计仓自身 CI 执行。
+- 依赖关系、集成或部署形态变更时，架构模型必须在**同一个 PR 内**同步更新设计仓。
+- 需与代码同一个 PR 的设计内容（模块级接口草案、实现级契约、字段级设计）留在 `docs/`，不进入设计仓。设计仓承载跨 PR 生命周期的资产，把代码附属设计放进去会导致设计滞后于代码。
+- 一个设计仓只服务一个项目；禁止多项目共用同一设计仓 submodule。
+- 跨项目视图由全局聚合仓 `aces-architecture` 维护，不在本仓。
+
 ## Submodule 提交规则
 
 - 修改 submodule 内容时，必须在 submodule 仓库内独立分支、提交、推送并创建 PR。
@@ -83,6 +97,7 @@ guides/                    非研究类阶段性工程记录
 scripts/                   可重复执行的自动化脚本
 vendor/research/aces-research/  研究工作区 submodule
 vendor/ai/maop/            AI 引擎 submodule
+vendor/design/aces-design/ 架构设计仓 submodule（架构即代码）
 .opencode/                 项目 OpenCode 桥接配置
 ```
 

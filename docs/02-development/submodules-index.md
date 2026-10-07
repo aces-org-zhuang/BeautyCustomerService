@@ -8,11 +8,40 @@
 | --- | --- | --- | --- | --- | --- |
 | `vendor/research/aces-research` | `https://github.com/aces-org-zhuang/aces-research.git` | 研究过程、论文、开源对比、证据包 | 研究任务、论文任务、证据验证任务 | `git submodule status --recursive` | 已添加，pinned `b2025592f1b5a5b37f1ca538ab6dfcf091e74e36` |
 | `vendor/ai/maop` | `https://github.com/aces-org-zhuang/maop.git` | maop-owned AI 引擎和 OpenCode 能力面 | `.opencode/opencode.json` | `git -C vendor/ai/maop sparse-checkout list` 应包含 `/.opencode/` 和 `/README.md`；`git -C vendor/ai/maop branch -r --contains <pinned>` 应包含 `origin/main` | 已添加，pinned `c5269031d9ca90889357c67da4869929c3377fa2`，已启用 sparse-checkout，commit 已在 `origin/main` 可见 |
+| `vendor/design/aces-design` | `https://github.com/aces-org-zhuang/design-beauty.git` | 架构模型、视图、时序图、部署视图（`src/**/*.c4`）；不含需与代码同 PR 的内容 | `.opencode/opencode.json` 的 `likec4` MCP；开发者经 `likec4 serve` 浏览 | `git -C vendor/design/aces-design rev-parse --short HEAD`；`npm run validate` 在设计仓内执行 | 已添加，pinned `6d24877df2e8bf7a6173a1b63aec16e0143a10fd`，**未启用 sparse-checkout**（LikeC4 需要完整工作区），主仓不构建 |
+
+## 设计仓条目说明
+
+### 边界
+
+设计仓只承载跨 PR 生命周期的架构资产：组件划分、集成关系、部署形态、时序流程。
+
+**需与代码同一个 PR 的内容留在本仓 `docs/`**，例如模块级接口草案、实现级契约、字段级设计。原因：设计仓通过 submodule 指针固定，内容变更需先在设计仓发版再回主仓提 PR；若把代码附属设计放进去，设计必然滞后于代码。
+
+### 消费者
+
+- `architecture-design` 技能经 `likec4` MCP 查询模型（结构化图查询，而非读取 `.c4` 原文）
+- 开发者经设计仓内 `npm run dev`（`likec4 serve`）热预览
+
+### 构建入口
+
+`none`。主仓**不构建**设计仓，`likec4 build` 由设计仓自身 CI 执行。设计仓 CI 地址：https://github.com/aces-org-zhuang/design-beauty/actions
+
+### 验证入口
+
+设计仓 CI 执行 `likec4 validate` 与 `likec4 format --check`。主仓 CI 只做只读检出（需 `submodules: recursive`），不执行设计仓校验。
+
+### 更新策略
+
+固定 commit，不自动跟随。设计仓发版后由本仓开 PR 更新 submodule 指针。gitlink 不会自动同步。
 
 ## 规则
 
 - 不普通 clone 外部参考仓到主仓。
 - 研究参考仓放入具体课题 `vendor/research/aces-research/topics/<research_slug>/repos/<repo_name>`。
 - maop submodule 必须启用 sparse-checkout，只检出 `.opencode` 和 `README.md`。
+- **设计仓 submodule 必须禁用 sparse-checkout**。LikeC4 CLI 需要完整工作区才能执行 `validate` 与 `build`；部分检出会导致跨文件 `include` 目标缺失而构建失败。这与 maop 的规则相反，不要照搬。
+- **一个设计仓只服务一个项目**。禁止多个项目共用同一设计仓 submodule——gitlink 记录子仓 HEAD commit，会导致每次设计提交都在所有引用方仓产生无关 PR。
 - 主仓不递归初始化 maop 内部 submodule；maop 内部依赖由 maop 仓库自身治理。
 - 当前用户确认暂不初始化 `vendor/research/aces-research/topics/wechat-customer-service-ai-faq-feedback/repos/FastGPT/pro`；该嵌套 submodule 不作为本轮初始化 RED 点。
+

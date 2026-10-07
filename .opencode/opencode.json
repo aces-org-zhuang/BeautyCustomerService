@@ -23,6 +23,18 @@
       "environment": {
         "BROWSER": "chromium"
       }
+    },
+    "likec4": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@likec4/mcp"
+      ],
+      "enabled": true,
+      "environment": {
+        "LIKEC4_WORKSPACE": "vendor/design/aces-design"
+      }
     }
   }
 }
