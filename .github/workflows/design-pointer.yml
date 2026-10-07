@@ -1,0 +1,68 @@
+name: design-pointer
+
+# Detects when the pinned architecture model is behind the design repo.
+#
+# The design repo has its own CI and releases independently. This project's
+# submodule pointer does not follow automatically, so architecture context
+# can silently go stale. This job reports it instead of relying on someone
+# remembering.
+#
+# It does not fail the build: a stale pointer affects AI architecture context
+# and documentation accuracy, not the code's correctness.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Daily, so drift is noticed even when neither repo changes.
+    - cron: '17 3 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  check-design-pointer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Read pinned design commit
+        id: pinned
+        run: |
+          pinned=$(git ls-tree HEAD vendor/design/aces-design | awk '{print $3}')
+          echo "commit=$pinned" >> "$GITHUB_OUTPUT"
+          echo "Pinned design commit: $pinned"
+
+      - name: Read latest design commit
+        id: latest
+        run: |
+          latest=$(git ls-remote https://github.com/aces-org-zhuang/design-beauty.git \
+            refs/heads/main | awk '{print $1}')
+          echo "commit=$latest" >> "$GITHUB_OUTPUT"
+          echo "Latest design commit: $latest"
+
+      - name: Compare
+        run: |
+          pinned="${{ steps.pinned.outputs.commit }}"
+          latest="${{ steps.latest.outputs.commit }}"
+          if [ "$pinned" = "$latest" ]; then
+            echo "Design pointer is up to date."
+            exit 0
+          fi
+          echo "::warning title=架构设计仓指针落后::The pinned architecture model is behind the design repo."
+          echo "  pinned: $pinned"
+          echo "  latest: $latest"
+          echo "Open a PR that updates vendor/design/aces-design and the pinned value in docs/02-development/submodules-index.md."
+
+      - name: Validate design model when pointer matches
+        if: steps.pinned.outputs.commit == steps.latest.outputs.commit
+        run: |
+          git submodule update --init vendor/design/aces-design
+          cd vendor/design/aces-design
+          npm ci
+          npm run validate
+          npm run format:check
