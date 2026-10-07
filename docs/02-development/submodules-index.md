@@ -8,7 +8,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `vendor/research/aces-research` | `https://github.com/aces-org-zhuang/aces-research.git` | 研究过程、论文、开源对比、证据包 | 研究任务、论文任务、证据验证任务 | `git submodule status --recursive` | 已添加，pinned `b2025592f1b5a5b37f1ca538ab6dfcf091e74e36` |
 | `vendor/ai/maop` | `https://github.com/aces-org-zhuang/maop.git` | maop-owned AI 引擎和 OpenCode 能力面 | `.opencode/opencode.json` | `git -C vendor/ai/maop sparse-checkout list` 应包含 `/.opencode/` 和 `/README.md`；`git -C vendor/ai/maop branch -r --contains <pinned>` 应包含 `origin/main` | 已添加，pinned `c5269031d9ca90889357c67da4869929c3377fa2`，已启用 sparse-checkout，commit 已在 `origin/main` 可见 |
-| `vendor/design/aces-design` | `https://github.com/aces-org-zhuang/design-beauty.git` | 架构模型、视图、时序图、部署视图（`src/**/*.c4`）；不含需与代码同 PR 的内容 | `.opencode/opencode.json` 的 `likec4` MCP；开发者经 `likec4 serve` 浏览 | `git -C vendor/design/aces-design rev-parse --short HEAD`；`npm run validate` 在设计仓内执行 | 已添加，pinned `460045f8df848390716039fb0d4f76d6b83289af`（架构模型中文化 + 移除多余 config），**未启用 sparse-checkout**（LikeC4 需要完整工作区），主仓不构建 |
+| `vendor/design/aces-design` | `https://github.com/aces-org-zhuang/design-beauty.git` | 架构模型、视图、时序图、部署视图（`src/**/*.c4`）与架构交接规格（`handoff/current.md`）；不含需与代码同 PR 的内容 | `.opencode/opencode.json` 的 `likec4` MCP；`technical-design` 与 `implementation-delivery` 经 `handoff/current.md` 复用架构边界；开发者经 `likec4 serve` 浏览 | `git -C vendor/design/aces-design rev-parse --short HEAD`；`npm run validate` 在设计仓内执行 | 已添加，pinned `c4ff01b`（中文化 + 修正损坏字符 + 移除多余 config + 首次交接规格），**未启用 sparse-checkout**（LikeC4 需要完整工作区），主仓不构建 |
 
 ## 设计仓条目说明
 
@@ -64,4 +64,19 @@ git ls-tree HEAD vendor/design/aces-design
 - **一个设计仓只服务一个项目**。禁止多个项目共用同一设计仓 submodule——gitlink 记录子仓 HEAD commit，会导致每次设计提交都在所有引用方仓产生无关 PR。
 - 主仓不递归初始化 maop 内部 submodule；maop 内部依赖由 maop 仓库自身治理。
 - 当前用户确认暂不初始化 `vendor/research/aces-research/topics/wechat-customer-service-ai-faq-feedback/repos/FastGPT/pro`；该嵌套 submodule 不作为本轮初始化 RED 点。
+
+## 架构交接规格
+
+架构交接规格位于设计仓内的 `handoff/current.md`，**不放主仓 docs**。它是架构模型的派生物，必须与被引用的模型版本处于同一 commit；放主仓会出现「规格说 A、模型是 B」的错配，而主仓无法独立验证它对应哪个模型版本。主仓 docs 承载的是规则、索引与需与代码同 PR 的内容。
+
+| 项 | 约定 |
+| --- | --- |
+| 路径 | `vendor/design/aces-design/handoff/current.md` |
+| 历史版本 | `handoff/history/<模型 commit>.md` |
+| 消费者 | `technical-design` 补齐接口与数据；`implementation-delivery` 消费完整交接包 |
+| 过期判定 | 规格记录的模型 commit 与本仓 pinned gitlink 不一致即视为过期 |
+| 缺失处理 | 文件不存在表示尚未产出，不阻塞实现类任务，只是不做架构复用 |
+| 修改方式 | 只读不改。需要修正架构时由 `architecture-design` 重新产出 |
+
+**依赖关系变更或部署形态变更前，先读该规格确认组件边界与依赖方向，不要重新推导。**
 
