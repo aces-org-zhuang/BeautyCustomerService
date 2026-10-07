@@ -4,3 +4,6 @@
 [submodule "vendor/ai/maop"]
 	path = vendor/ai/maop
 	url = https://github.com/aces-org-zhuang/maop.git
+[submodule "vendor/design/aces-design"]
+	path = vendor/design/aces-design
+	url = https://github.com/aces-org-zhuang/design-beauty.git
